@@ -125,6 +125,22 @@ const INSURANCE_ALT = "ประกันอุบัติเหตุกลุ
 
 const THREAD_KEYWORDS = ["mongodb", "java", "react", "nestjs", "error"] as const;
 
+/** คำตอบจาก AI (POST /assistant/chat) หรือ null เมื่อไม่ได้ตั้ง key / เรียกไม่สำเร็จ */
+async function askAssistant(question: string): Promise<string | null> {
+  try {
+    const res = await fetch("/assistant/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question: question.trim().slice(0, 1000) }),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as SuccessEnvelope<{ answer: string }>;
+    return body.data.answer || null;
+  } catch {
+    return null;
+  }
+}
+
 /** คืนรายการข้อความตอบกลับของบอท (ยังไม่มี id) สำหรับข้อความที่ผู้ใช้พิมพ์ */
 export async function getBotReplies(textToSend: string): Promise<BotReply[]> {
   const cleanText = textToSend.trim().toLowerCase();
@@ -449,6 +465,12 @@ export async function getBotReplies(textToSend: string): Promise<BotReply[]> {
         },
       ];
     }
+  }
+
+  // 9. ไม่ตรงหัวข้อไหน: ลองถาม AI (app/assistant/chat) ถ้าไม่ได้ตั้ง OPENAI_API_KEY หรือเรียกไม่สำเร็จ ใช้ข้อความเดิม
+  const aiAnswer = await askAssistant(textToSend);
+  if (aiAnswer) {
+    return [{ sender: "bot", text: aiAnswer }];
   }
 
   return [
