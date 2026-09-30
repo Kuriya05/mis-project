@@ -14,3 +14,17 @@ dist-ssr/
 *.log
 .DS_Store
 Thumbs.db
+
+# Prisma generated client (สร้างใหม่ตอน pnpm install)
+generated/
+
+# สำเนา repo อื่นที่วางไว้ข้างกันเพื่อรันในเครื่อง (standards ของจริงคือ submodule standards/)
+/csmju2030-standards/
+/csmju-core-hub/
+
+# never store Core Hub key material in this repository
+*.pem
+*.key
+
+# test coverage
+coverage/

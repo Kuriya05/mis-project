@@ -1,0 +1,23 @@
+{
+  "name": "csmju-helpdesk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CSMJU Helpdesk - กระดานถาม-ตอบและผู้ช่วยวิชาการ สาขาวิทยาการคอมพิวเตอร์ (ระบบย่อยของ CSMJU2030)",
+  "scripts": {
+    "dev": "pnpm --parallel --filter backend --filter frontend dev",
+    "build": "pnpm --filter frontend build && pnpm --filter backend build",
+    "start": "pnpm --parallel --filter frontend --filter backend start:prod",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm --filter backend typecheck",
+    "test": "pnpm --filter backend test",
+    "test:e2e": "pnpm --filter backend test:e2e",
+    "db:migrate": "pnpm --filter backend db:migrate",
+    "db:seed": "pnpm --filter backend db:seed",
+    "conformance": "node standards/conformance/run.js",
+    "checks": "bash standards/scripts/run-all-checks.sh ."
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.34.5"
+}

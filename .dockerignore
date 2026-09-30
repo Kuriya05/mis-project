@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+dist
+**/dist
+generated
+**/generated
+coverage
+.env
+**/.env
+*.log
+.git
+csmju2030-standards
+csmju-core-hub
+standards
+.next
+**/.next

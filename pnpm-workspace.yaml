@@ -1,0 +1,13 @@
+packages:
+  - 'backend'
+  - 'frontend'
+
+# pnpm 10 บล็อก build script ของ dependency โดยค่าเริ่มต้น
+# Prisma ต้องรัน postinstall เพื่อเตรียม engine จึงต้องอนุญาตไว้
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@parcel/watcher'
+  - '@prisma/engines'
+  - '@tailwindcss/oxide'
+  - prisma
+  - unrs-resolver
