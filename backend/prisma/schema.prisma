@@ -1,0 +1,155 @@
+// ฐานข้อมูลของระบบย่อย helpdesk (กระดานถาม-ตอบ) — helpdesk_db
+// ตั้งชื่อตาม standards/docs/data-dictionary.md ข้อ 9:
+// DB เป็น snake_case (ผ่าน @map / @@map) · Prisma/TS เป็น camelCase · PK เป็น UUID
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = ""
+  previewFeatures     = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ค่าเดียวกับ claim `role` ของ Core Hub (data-dictionary.md ข้อ 4)
+enum CoreRole {
+  STUDENT @map("student")
+  ALUMNI  @map("alumni")
+  STAFF   @map("staff")
+  ADMIN   @map("admin")
+
+  @@map("core_role")
+}
+
+enum QuestionStatus {
+  WAITING
+  RESOLVED
+
+  @@map("question_status")
+}
+
+// external reference ไปยังผู้ใช้ของ Core Hub — ไม่ใช่ตาราง user ของตัวเอง และไม่เก็บรหัสผ่าน
+// core_role เป็นสำเนาจาก token ล่าสุด (ใช้แสดง badge ให้คนอื่นเห็น) ห้ามแก้เองนอกจากตอน sync จาก token
+// display_name เป็น local data เพราะ Core Hub v1.0 ยังไม่มี full_name (data-dictionary.md ข้อ 1.3)
+model Profile {
+  id          String   @id @default(uuid()) @db.Uuid
+  coreUserId  String   @unique @map("core_user_id")
+  coreRole    CoreRole @map("core_role")
+  displayName String   @map("display_name") @db.VarChar(100)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  questions     Question[]
+  comments      Comment[]
+  questionVotes QuestionVote[]
+  commentVotes  CommentVote[]
+
+  @@map("profiles")
+}
+
+model Question {
+  id        String         @id @default(uuid()) @db.Uuid
+  authorId  String         @map("author_id") @db.Uuid
+  title     String         @db.VarChar(150)
+  body      String
+  status    QuestionStatus @default(WAITING)
+  editedAt  DateTime?      @map("edited_at") @db.Timestamptz(3)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  author   Profile        @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  tags     QuestionTag[]
+  comments Comment[]
+  votes    QuestionVote[]
+
+  @@index([createdAt(sort: Desc)])
+  @@index([authorId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("questions")
+}
+
+model Tag {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(30)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  questions QuestionTag[]
+
+  @@map("tags")
+}
+
+model QuestionTag {
+  id         String   @id @default(uuid()) @db.Uuid
+  questionId String   @map("question_id") @db.Uuid
+  tagId      String   @map("tag_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, tagId])
+  @@index([tagId])
+  @@map("question_tags")
+}
+
+// parent_id = null คือคำตอบ · มีค่าคือข้อความตอบกลับใต้คำตอบนั้น (ลึกได้ชั้นเดียว)
+// แต่ละกระทู้มีคำตอบที่ยืนยันแล้วได้ไม่เกิน 1 ข้อ (partial unique index ด้านล่าง)
+// CHECK "ข้อความตอบกลับห้าม is_verified" Prisma ประกาศไม่ได้ จึงเขียนไว้ใน migration init
+model Comment {
+  id         String    @id @default(uuid()) @db.Uuid
+  questionId String    @map("question_id") @db.Uuid
+  parentId   String?   @map("parent_id") @db.Uuid
+  authorId   String    @map("author_id") @db.Uuid
+  body       String
+  isVerified Boolean   @default(false) @map("is_verified")
+  editedAt   DateTime? @map("edited_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  question Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  parent   Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[]     @relation("CommentReplies")
+  author   Profile       @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  votes    CommentVote[]
+
+  @@unique([questionId], map: "comments_question_id_verified_key", where: { isVerified: true })
+  @@index([questionId, createdAt])
+  @@index([parentId])
+  @@index([authorId])
+  @@map("comments")
+}
+
+model QuestionVote {
+  id         String   @id @default(uuid()) @db.Uuid
+  questionId String   @map("question_id") @db.Uuid
+  profileId  String   @map("profile_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  profile  Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, profileId])
+  @@index([profileId])
+  @@map("question_votes")
+}
+
+model CommentVote {
+  id        String   @id @default(uuid()) @db.Uuid
+  commentId String   @map("comment_id") @db.Uuid
+  profileId String   @map("profile_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, profileId])
+  @@index([profileId])
+  @@map("comment_votes")
+}
