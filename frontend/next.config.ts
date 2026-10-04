@@ -15,7 +15,8 @@ const DEV_ALLOWED_ORIGINS = (process.env.DEV_ALLOWED_ORIGINS ?? "")
   .filter(Boolean);
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // standalone ใช้กับ Docker (backend/Dockerfile) · Vercel build แบบของตัวเอง และ standalone ทำให้ขั้นเก็บไฟล์ล้ม
+  output: process.env.VERCEL ? undefined : "standalone",
   allowedDevOrigins: DEV_ALLOWED_ORIGINS,
   poweredByHeader: false,
   async rewrites() {
