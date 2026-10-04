@@ -8,7 +8,7 @@ repo: github.com/wannapa368/mis-project
 # เวอร์ชัน standards อยู่ใน .standards-version ไฟล์เดียว
 conformance_level: L3
 
-base_url: http://localhost:3235       # ประตูเดียวคือ frontend (32xx) ซึ่งส่ง /api และ /auth ต่อไป backend (42xx)
+base_url: https://csmju-study-qa.vercel.app   # ประตูเดียวคือ frontend (Vercel) ซึ่งส่ง /api และ /auth ต่อไป backend (Render) · ในเครื่องใช้ http://localhost:3235
 core_hub_url: https://csmju2030.jowave.com
 core_hub_web_url: https://csmju2030.jowave.com
 callback_path: /auth/callback         # ต้องตรงกับ callback_url ที่ลงทะเบียนไว้
