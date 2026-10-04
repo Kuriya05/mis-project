@@ -6,7 +6,7 @@ services:
     name: csmju-study-qa-api
     runtime: node
     plan: free
-    region: singapore
+    region: ohio  # ใกล้ฐานข้อมูล Neon (AWS us-east-2)
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter backend build
     # migration ก่อนเริ่มทุกครั้ง (prisma migrate deploy ไม่ทำซ้ำอันที่รันแล้ว)
     startCommand: pnpm --filter backend db:migrate && pnpm --filter backend start:prod

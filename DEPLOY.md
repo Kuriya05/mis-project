@@ -19,7 +19,7 @@ Vercel และ Render ดึงโค้ดจาก GitHub · ถ้าไม
 
 ## 1. ฐานข้อมูล — Neon
 
-1. https://neon.tech → New Project → Region: **AWS Singapore** · PostgreSQL 16 ขึ้นไป
+1. https://neon.tech → New Project → Region: เลือกให้ตรงกับ `region` ใน `render.yaml` (ตอนนี้ Ohio = AWS US East 2) · PostgreSQL 16 ขึ้นไป
 2. คัดลอก **Connection string** (แบบ pooled ไม่ได้ก็ได้) หน้าตา `postgresql://user:pass@ep-xxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`
 3. เก็บไว้ใช้ข้อ 2 — **ห้ามใส่ใน repo หรือแชต**
 
