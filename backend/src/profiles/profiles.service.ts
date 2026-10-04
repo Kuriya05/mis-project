@@ -1,28 +1,51 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { Profile } from '../../generated/prisma/client';
 import { CoreHubIdentity } from '../auth/core-hub-identity';
 import { AppException } from '../common/errors';
+import { PeopleService } from '../core-hub/people.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { coreRoleFromClaim } from './profile.view';
 
-const FALLBACK_DISPLAY_NAME = 'ผู้ใช้';
-const DISPLAY_NAME_MAX = 100;
-
-/** Core Hub v1.0 has no full name, so a first-time user starts with the local part of the e-mail. */
-export function defaultDisplayName(email: string): string {
-  const local = email.split('@')[0]?.trim() ?? '';
-  return (local || FALLBACK_DISPLAY_NAME).slice(0, DISPLAY_NAME_MAX);
-}
-
 @Injectable()
 export class ProfilesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly people: PeopleService,
+  ) {}
 
   /**
    * The local record for the verified caller, created on first sight. core_role
    * is a copy of the token claim and is refreshed whenever Core Hub changes it.
+   *
+   * With the caller's token, a profile that has no person_code yet asks Core
+   * Hub for it (GET /people/me) - when the profile is shown or the caller
+   * writes a question or an answer. person_code only labels authors, so a
+   * Core Hub that cannot answer leaves it null (the role is shown instead)
+   * rather than failing the request (reference-data.md 9) - except 401, which
+   * means the session is over.
    */
-  async ensure(user: CoreHubIdentity): Promise<Profile> {
+  async ensure(user: CoreHubIdentity, token?: string): Promise<Profile> {
+    const profile = await this.ensureRecord(user);
+    if (token === undefined || profile.personCode !== null) {
+      return profile;
+    }
+
+    let personCode: string | null;
+    try {
+      personCode = await this.people.myPersonCode(token);
+    } catch (error) {
+      if (error instanceof AppException && error.getStatus() === HttpStatus.UNAUTHORIZED) {
+        throw error;
+      }
+      return profile;
+    }
+    if (personCode === null) {
+      return profile;
+    }
+    return this.prisma.profile.update({ where: { id: profile.id }, data: { personCode } });
+  }
+
+  private async ensureRecord(user: CoreHubIdentity): Promise<Profile> {
     const coreRole = coreRoleFromClaim(user.coreRole);
     if (!coreRole) {
       throw AppException.forbidden('Your Core Hub role has no access to this subsystem');
@@ -39,12 +62,7 @@ export class ProfilesService {
     return this.prisma.profile.upsert({
       where: { coreUserId: user.id },
       update: { coreRole },
-      create: { coreUserId: user.id, coreRole, displayName: defaultDisplayName(user.email) },
+      create: { coreUserId: user.id, coreRole },
     });
-  }
-
-  async updateDisplayName(user: CoreHubIdentity, displayName: string): Promise<Profile> {
-    const profile = await this.ensure(user);
-    return this.prisma.profile.update({ where: { id: profile.id }, data: { displayName } });
   }
 }

@@ -36,14 +36,14 @@ async function main(): Promise<void> {
 
   const dryRun = process.argv.includes('--dry-run');
   const coreHubUrl = (process.env.CORE_HUB_URL || 'http://localhost:3000').replace(/\/+$/, '');
-  const baseUrl = (process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3002}`).replace(
+  const baseUrl = (process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 4235}`).replace(
     /\/+$/,
     '',
   );
 
   const body = {
-    name: process.env.SUBSYSTEM_ID || 'csmju-helpdesk',
-    displayName: process.env.SUBSYSTEM_NAME || 'CSMJU Helpdesk',
+    name: process.env.SUBSYSTEM_ID || 'csmju-study-qa',
+    displayName: process.env.SUBSYSTEM_NAME || 'ถาม-ตอบวิชาการ CS แม่โจ้',
     owner: dryRun ? process.env.CORE_HUB_REGISTRATION_OWNER || '<CORE_HUB_REGISTRATION_OWNER>' : required('CORE_HUB_REGISTRATION_OWNER'),
     repo: REPO,
     standardsVersion: STANDARDS_VERSION,

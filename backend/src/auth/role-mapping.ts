@@ -7,7 +7,9 @@ import { SubsystemRole } from './core-hub-identity';
  *   ---------------------------------
  *   student            STUDENT
  *   alumni             ALUMNI
- *   staff              STAFF
+ *   staff              STAFF    (staff who are not lecturers)
+ *   lecturer           STAFF    (standards 1.0.6 / 1.6.0)
+ *   guest              ALUMNI   (looks at rooms only)
  *   admin              ADMIN
  *
  * The mapping is explicit and lives only in this subsystem. The Core Hub role
@@ -18,6 +20,8 @@ export const CORE_ROLE_TO_SUBSYSTEM_ROLE: Readonly<Record<string, SubsystemRole>
   student: SubsystemRole.STUDENT,
   alumni: SubsystemRole.ALUMNI,
   staff: SubsystemRole.STAFF,
+  lecturer: SubsystemRole.STAFF,
+  guest: SubsystemRole.ALUMNI,
   admin: SubsystemRole.ADMIN,
 });
 

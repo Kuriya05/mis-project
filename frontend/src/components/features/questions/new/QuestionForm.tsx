@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "@/components/shared/Avatar";
 import { btnPrimary, btnSecondary, card, iconBtn, input, inputShell } from "@/components/shared/classes";
@@ -9,10 +9,13 @@ import { useSession } from "@/components/shared/SessionProvider";
 import { AlertCircleIcon, ImageIcon, SendIcon, SparklesIcon, SpinnerIcon } from "@/components/shared/icons";
 import { AddIcon, CheckIcon, CloseIcon, SearchIcon } from "@/csmju";
 import { api, errorCode, errorField, errorMessage, unwrap } from "@/lib/api";
+import { FACULTY } from "@/data/faculty";
 import { invalidateForumCache } from "@/lib/forum-cache";
 import { DEFAULT_HOT_TAGS } from "@/lib/tags";
+import { authorLabel } from "@/lib/permissions";
 import type { QuestionDetail, SuccessEnvelope, Tag } from "@/lib/types";
 import { BoldIcon, CodeIcon, HashIcon, ItalicIcon, LinkIcon, TagIcon } from "./EditorIcons";
+import AiDraftHelper from "./AiDraftHelper";
 import QuestionPreview from "./QuestionPreview";
 import StepHeader from "./StepHeader";
 import { MAX_TAGS, MAX_TITLE, normalizeTag } from "./tag-input";
@@ -67,7 +70,12 @@ export default function QuestionForm() {
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
+  // มาจากปุ่ม "ถามเรื่องที่อาจารย์ถนัด" ในทำเนียบ: /questions/new?tags=AI,Data&lecturer=<id>
+  const searchParams = useSearchParams();
+  const lecturer = FACULTY.find((f) => f.id === searchParams.get("lecturer"));
+  const [tags, setTags] = useState<string[]>(() =>
+    [...new Set((searchParams.get("tags") ?? "").split(",").map(normalizeTag).filter(Boolean))].slice(0, MAX_TAGS),
+  );
   const [tagQuery, setTagQuery] = useState("");
   const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
@@ -281,6 +289,13 @@ export default function QuestionForm() {
           )}
         </div>
 
+        {lecturer && (
+          <p className="rounded-lg bg-primary-container/5 px-4 py-3 text-label-md text-primary-container">
+            ถามเรื่องที่ {lecturer.prefix}
+            {lecturer.nameTh} ถนัด — ใส่แท็กตามความถนัดให้แล้ว ผู้ช่วย AI จะแนะนำอาจารย์ที่เกี่ยวข้องในคำตอบ
+          </p>
+        )}
+
         {/* 1. หัวข้อ */}
         <section>
           <StepHeader
@@ -375,6 +390,18 @@ export default function QuestionForm() {
           </div>
           {fieldError("body")}
         </section>
+
+        <AiDraftHelper
+          title={title}
+          body={body}
+          tags={tags}
+          existingTags={existingTags.map((t) => t.name)}
+          onUseTitle={(next) => {
+            setTitle(next.slice(0, MAX_TITLE));
+            setFieldError("title", undefined);
+          }}
+          onAddTag={handleAddTag}
+        />
 
         {/* 3. แท็ก */}
         <section>
@@ -552,8 +579,8 @@ export default function QuestionForm() {
         {/* ปุ่ม */}
         <div className="flex flex-col-reverse justify-end gap-3 border-t border-outline-variant/40 pt-6 sm:flex-row sm:items-center">
           <span className="flex items-center gap-2 text-caption text-secondary sm:mr-auto">
-            <Avatar name={profile.displayName} size="xs" />
-            โพสต์ในนาม <strong className="font-semibold text-on-surface">{profile.displayName}</strong>
+            <Avatar name={authorLabel(profile)} size="xs" />
+            โพสต์ในนาม <strong className="font-semibold text-on-surface">{authorLabel(profile)}</strong>
           </span>
           <Link href="/questions" className={btnSecondary}>
             ยกเลิก
@@ -564,7 +591,7 @@ export default function QuestionForm() {
         </div>
       </form>
 
-      <QuestionPreview authorName={profile.displayName} title={title} tags={tags} />
+      <QuestionPreview authorName={authorLabel(profile)} title={title} tags={tags} />
     </div>
   );
 }

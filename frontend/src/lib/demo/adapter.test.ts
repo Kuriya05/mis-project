@@ -2,7 +2,7 @@
 import axios from "axios";
 import { describe, expect, it } from "vitest";
 import type { QuestionDetail, QuestionSummary, SuccessEnvelope, Tag } from "../types";
-import { demoAdapter } from "./adapter";
+import { demoAdapter, uuidV4 } from "./adapter";
 import { DEMO_USER_ID } from "./profile";
 
 const api = axios.create({ adapter: demoAdapter });
@@ -70,10 +70,22 @@ describe("demo adapter", () => {
     await expect(api.get("/api/v1/questions/missing")).rejects.toMatchObject({ response: { status: 404 } });
   });
 
-  it("renames the demo user on the board", async () => {
-    const res = await api.patch("/api/v1/profiles/me", { displayName: "ชื่อใหม่" });
-    expect(res.data.data.displayName).toBe("ชื่อใหม่");
+  it("shows authors by person code, never by name", async () => {
+    const res = await api.get("/api/v1/profiles/me");
+    expect(res.data.data.personCode).toBe("6599000011");
+    expect(res.data.data).not.toHaveProperty("displayName");
     const mine = await list({ mine: true });
-    expect(mine.data[0].author.displayName).toBe("ชื่อใหม่");
+    expect(mine.data[0].author.personCode).toBe("6599000011");
+  });
+});
+
+// เปิด dev server ผ่าน IP (http ที่ไม่ใช่ localhost) ไม่มี crypto.randomUUID — ตั้งกระทู้ต้องยังใช้ได้
+describe("uuidV4", () => {
+  it("makes RFC 4122 version 4 ids without crypto.randomUUID", () => {
+    const ids = new Set(Array.from({ length: 200 }, () => uuidV4()));
+    expect(ids.size).toBe(200);
+    for (const id of ids) {
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    }
   });
 });

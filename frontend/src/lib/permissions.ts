@@ -6,7 +6,9 @@ import type { CoreRole, MyProfile, Permission } from "./types";
 const ROLE_LABELS: Record<CoreRole, string> = {
   student: "นักศึกษา",
   alumni: "ศิษย์เก่า",
-  staff: "อาจารย์",
+  lecturer: "อาจารย์",
+  staff: "เจ้าหน้าที่",
+  guest: "ผู้เยี่ยมชม",
   admin: "ผู้ดูแลระบบ",
 };
 
@@ -15,7 +17,7 @@ export function roleLabel(coreRole: string | undefined): string {
 }
 
 export function isStaffRole(coreRole: string | undefined): boolean {
-  return coreRole === "staff" || coreRole === "admin";
+  return coreRole === "lecturer" || coreRole === "staff" || coreRole === "admin";
 }
 
 export function roleBadgeClass(coreRole: string | undefined): string {
@@ -39,6 +41,20 @@ export function canOnResource(
 ): boolean {
   if (!profile) return false;
   return can(profile, any) || (profile.id === ownerId && can(profile, own));
+}
+
+/**
+ * ป้ายของผู้เขียน: รหัสบุคคลจาก Core Hub หรือบทบาทเมื่อบัญชีไม่ผูกกับบุคคล
+ * ระบบนี้ไม่เก็บชื่อผู้ใช้ (reference-data.md ข้อ 8)
+ */
+export function authorLabel(person: { personCode: string | null; coreRole: string; isAssistant?: boolean }): string {
+  if (person.isAssistant) return "ผู้ช่วย AI";
+  return person.personCode ?? roleLabel(person.coreRole);
+}
+
+/** ป้ายบทบาทข้างชื่อผู้เขียน — ผู้ช่วย AI ไม่มีบทบาทของ Core Hub */
+export function authorRoleLabel(person: { coreRole: string; isAssistant?: boolean }): string {
+  return person.isAssistant ? "AI" : roleLabel(person.coreRole);
 }
 
 /** อักษรย่อ 1–2 ตัวสำหรับอวตาร */

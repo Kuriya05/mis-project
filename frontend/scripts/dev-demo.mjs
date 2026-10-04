@@ -3,7 +3,7 @@
 import { spawn } from "node:child_process";
 import process from "node:process";
 
-const child = spawn("next", ["dev", "--webpack", "-p", process.env.PORT || "3102"], {
+const child = spawn("next", ["dev", "--webpack", "-p", process.env.PORT || "3235"], {
   stdio: "inherit",
   shell: true,
   env: { ...process.env, NEXT_PUBLIC_DEMO_MODE: "1" },

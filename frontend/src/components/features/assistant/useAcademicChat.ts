@@ -7,8 +7,16 @@ import {
   nextMessageId,
   withIds,
   type ChatMessage,
+  type ChatTurn,
   type PreviewImage,
 } from "@/lib/academic-bot";
+
+/** ข้อความตัวอักษรในแชท (ไม่รวมการ์ด รูป มาสคอต) เป็นบริบทให้ผู้ช่วย AI */
+function historyOf(messages: ChatMessage[]): ChatTurn[] {
+  return messages
+    .filter((m) => m.text && !m.id.startsWith("welcome-"))
+    .map((m) => ({ role: m.sender === "user" ? "user" : "assistant", text: m.text! }));
+}
 
 /** หน่วงให้ดูเหมือนบอทกำลังพิมพ์ */
 const REPLY_DELAY_MS = 800;
@@ -16,6 +24,9 @@ const REPLY_DELAY_MS = 800;
 /** สถานะแชทบอทวิชาการ ใช้ร่วมกันทั้งหน้าผู้ช่วยวิชาการและหน้าต่างแชทลอย */
 export function useAcademicChat() {
   const [messages, setMessages] = useState<ChatMessage[]>(WELCOME_MESSAGES);
+  // send() อ่านประวัติล่าสุดโดยไม่ต้องสร้าง callback ใหม่ทุกครั้งที่มีข้อความ
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const [input, setInput] = useState("");
   const [isBotReplying, setIsBotReplying] = useState(false);
   const [preview, setPreview] = useState<PreviewImage | null>(null);
@@ -48,7 +59,7 @@ export function useAcademicChat() {
 
     timerRef.current = setTimeout(async () => {
       try {
-        const replies = await getBotReplies(text);
+        const replies = await getBotReplies(text, historyOf(messagesRef.current));
         setMessages((prev) => [...prev, ...withIds(replies)]);
       } catch (err) {
         console.error(err);

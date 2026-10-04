@@ -51,6 +51,14 @@ export type NavItem = {
   icon: NavIconName;
 };
 
+/**
+ * Every subsystem's sign-out (auth-contract.md 5): a POST to its own
+ * /auth/logout, which next.config.ts passes on to the backend. The backend
+ * clears the session cookie and answers 303 to Core Hub's /logout. A link
+ * (GET) would not reach that route.
+ */
+const LOGOUT_ACTION = "/auth/logout";
+
 const FOOTER_LINKS = [
   "ติดต่อเรา",
   "นโยบายความเป็นส่วนตัว",
@@ -63,7 +71,6 @@ export default function CsmjuAppShell({
   nav,
   primaryAction,
   user,
-  logoutHref,
   children,
 }: {
   /** Subsystem name shown in the mobile top bar, e.g. "ระบบครุภัณฑ์". */
@@ -72,11 +79,9 @@ export default function CsmjuAppShell({
   /** Optional gradient button under the logo, e.g. { label: "สร้างประกาศใหม่", href: "/news/new" }. */
   primaryAction?: { label: string; href: string };
   user: { initials: string; roleLabel: string };
-  /** Core logout URL (auth-contract.md). Subsystems must not implement logout themselves. */
-  logoutHref: string;
   children: React.ReactNode;
 }) {
-  const pathname = usePathname() ?? "";
+  const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
   const closeNav = () => setNavOpen(false);
   const rootHref = nav[0]?.href ?? "/";
@@ -98,7 +103,7 @@ export default function CsmjuAppShell({
           navOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="mb-8 px-4 pt-4">
+        <div className="mb-8 shrink-0 px-4 pt-4">
           <div className="mb-6 flex items-center justify-between gap-2">
             <CsmjuLogo framed priority className="w-full" />
             <button
@@ -123,7 +128,8 @@ export default function CsmjuAppShell({
           )}
         </div>
 
-        <nav className="mt-2 flex-1 overflow-y-auto">
+        {/* The menu scrolls on its own so sign-out below stays on screen. */}
+        <nav className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <ul className="space-y-1">
             {nav.map(({ href, label, labelEn, icon }) => {
               const Icon = NAV_ICONS[icon];
@@ -153,17 +159,19 @@ export default function CsmjuAppShell({
           </ul>
         </nav>
 
-        <a
-          href={logoutHref}
-          className="mx-4 mt-4 flex items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 py-2.5 text-label-md text-white backdrop-blur-sm transition-colors hover:bg-white/20"
-        >
-          <LogoutIcon className="h-4 w-4" />
-          ออกจากระบบ
-        </a>
+        <form action={LOGOUT_ACTION} method="post" className="mx-4 mt-4 shrink-0">
+          <button
+            type="submit"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 py-2.5 text-label-md text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+          >
+            <LogoutIcon className="h-4 w-4" />
+            ออกจากระบบ
+          </button>
+        </form>
       </aside>
 
       {/* MAIN */}
-      <main id="main" className="ml-0 flex min-h-dvh min-w-0 flex-1 flex-col md:ml-64">
+      <main id="main" className="ml-0 flex min-h-dvh flex-1 flex-col md:ml-64">
         <header className="sticky top-0 z-10 flex h-16 w-full items-center justify-between gap-4 border-b border-surface-variant bg-surface-container-lowest px-4 shadow-sm md:px-12">
           <div className="flex items-center gap-2 md:hidden">
             <button

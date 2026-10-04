@@ -26,7 +26,7 @@ import {
 } from './helpers/token-factory';
 
 const CORE_HUB_WEB_URL = 'http://hub-web.test';
-const { session: SESSION, state: STATE } = ssoCookieNames('csmju-helpdesk');
+const { session: SESSION, state: STATE } = ssoCookieNames('csmju-study-qa');
 const backslash = String.fromCharCode(92);
 
 type Res = request.Response;
@@ -112,7 +112,7 @@ describe('Central SSO (e2e)', () => {
       const target = new URL(res.headers.location);
 
       expect(`${target.origin}${target.pathname}`).toBe(`${CORE_HUB_WEB_URL}/sso/authorize`);
-      expect(target.searchParams.get('subsystem')).toBe('csmju-helpdesk');
+      expect(target.searchParams.get('subsystem')).toBe('csmju-study-qa');
       expect(state).toMatch(/^[A-Za-z0-9_-]{43,}$/);
       // Core Hub uses the registered callback; sending one would be refused.
       expect(target.searchParams.has('callback_url')).toBe(false);
@@ -144,7 +144,7 @@ describe('Central SSO (e2e)', () => {
     ])('replaces the unsafe next %s with the default landing', async (next) => {
       const res = await finishLogin(studentToken, next);
       expect(res.status).toBe(302);
-      expect(res.headers.location).toBe('/api/v1/me');
+      expect(res.headers.location).toBe('/');
     });
 
     it('is not placed under /api', async () => {
@@ -270,7 +270,7 @@ describe('Central SSO (e2e)', () => {
 
     it('lands on the default page when no next was given', async () => {
       const res = await finishLogin(studentToken);
-      expect(res.headers.location).toBe('/api/v1/me');
+      expect(res.headers.location).toBe('/');
     });
 
     it('marks every outcome no-store and no-referrer', async () => {

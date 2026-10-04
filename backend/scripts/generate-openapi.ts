@@ -27,7 +27,7 @@ async function main(): Promise<void> {
       .setDescription('กระดานถาม-ตอบ สาขาวิทยาการคอมพิวเตอร์ — ระบบย่อยของ CSMJU2030')
       .setVersion('1.0.0')
       .addBearerAuth()
-      .addCookieAuth('csmju_helpdesk_access_token')
+      .addCookieAuth('csmju_study_qa_access_token')
       .build(),
   );
 

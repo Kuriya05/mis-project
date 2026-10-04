@@ -2,13 +2,14 @@ import { CoreRole, PrismaClient, QuestionStatus } from '../../generated/prisma/c
 
 // user-002 / user-003 ตรงกับบัญชี dev ของ Core Hub (standards/fixtures/dev-accounts.json)
 // ที่เหลือเป็นผู้ใช้สมมติสำหรับข้อมูลตัวอย่างเท่านั้น
+// person_code สมมติทั้งหมด (รหัส 6599xxxxxx ไม่ใช่รหัสนักศึกษาจริง) · ไม่เก็บชื่อ (reference-data.md ข้อ 8)
 const PROFILES = {
-  teacher: { coreUserId: 'user-003', coreRole: CoreRole.STAFF, displayName: 'อาจารย์สมศักดิ์' },
-  anon: { coreUserId: 'user-002', coreRole: CoreRole.STUDENT, displayName: 'นักศึกษาปริศนา' },
-  wannapa: { coreUserId: 'seed-student-wannapa', coreRole: CoreRole.STUDENT, displayName: 'Wannapa C.' },
-  somchai: { coreUserId: 'seed-student-somchai', coreRole: CoreRole.STUDENT, displayName: 'Somchai R.' },
-  thanakorn: { coreUserId: 'seed-student-thanakorn', coreRole: CoreRole.STUDENT, displayName: 'Thanakorn K.' },
-  anan: { coreUserId: 'seed-student-anan', coreRole: CoreRole.STUDENT, displayName: 'Anan P.' },
+  teacher: { coreUserId: 'user-003', coreRole: CoreRole.LECTURER, personCode: 'sample.lecturer' },
+  anon: { coreUserId: 'user-002', coreRole: CoreRole.STUDENT, personCode: '6599000002' },
+  wannapa: { coreUserId: 'seed-student-wannapa', coreRole: CoreRole.STUDENT, personCode: '6599000011' },
+  somchai: { coreUserId: 'seed-student-somchai', coreRole: CoreRole.STUDENT, personCode: '6599000012' },
+  thanakorn: { coreUserId: 'seed-student-thanakorn', coreRole: CoreRole.STUDENT, personCode: '6599000013' },
+  anan: { coreUserId: 'seed-student-anan', coreRole: CoreRole.STUDENT, personCode: '6599000014' },
 } as const;
 type ProfileKey = keyof typeof PROFILES;
 
@@ -146,7 +147,7 @@ export async function loadSampleData(
   for (const [key, p] of Object.entries(PROFILES) as [ProfileKey, (typeof PROFILES)[ProfileKey]][]) {
     const row = await prisma.profile.upsert({
       where: { coreUserId: p.coreUserId },
-      update: { displayName: p.displayName, coreRole: p.coreRole },
+      update: { personCode: p.personCode, coreRole: p.coreRole },
       create: p,
     });
     profileIds[key] = row.id;

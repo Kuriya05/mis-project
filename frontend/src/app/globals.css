@@ -34,7 +34,8 @@
   --color-sso: #2d8a61;
   --color-sso-container: #e8f5ee;
 
-  --font-display: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  /* Plus Jakarta Sans has no Thai glyphs: Thai headings fall through to Noto Sans Thai (ui-design-system.md 4.1). */
+  --font-display: var(--font-jakarta), var(--font-noto-thai), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-noto-thai), ui-sans-serif, system-ui, sans-serif;
 
   --text-display-lg: 48px;

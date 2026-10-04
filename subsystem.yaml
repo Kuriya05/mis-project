@@ -1,15 +1,16 @@
 # manifest ของระบบย่อย — CI และ conformance อ่านไฟล์นี้ไฟล์เดียว
-# schema: csmju2030-standards/schemas/subsystem.schema.json
+# schema: standards/schemas/subsystem.schema.json
+# ห้ามใส่บัญชีหรือรหัสผ่านในไฟล์นี้ — บัญชีทดสอบอยู่ในไฟล์นอก repo (standards/docs/conformance.md ข้อ 2.1)
 
-name: csmju-helpdesk                  # ตรงกับทะเบียนใน Core Hub และกับ data.service ของ /api/health
-display_name: "CSMJU Helpdesk"
+name: csmju-study-qa                  # ตรงกับทะเบียนใน Core Hub และกับ data.service ของ /api/health
+display_name: "ถาม-ตอบวิชาการ CS แม่โจ้"
 repo: github.com/wannapa368/mis-project
-standards_version: "1.2.0"
+# เวอร์ชัน standards อยู่ใน .standards-version ไฟล์เดียว
 conformance_level: L3
 
-base_url: http://localhost:3002       # origin เดียว: backend รับทุก request แล้วส่งหน้าเว็บต่อให้ Next server
-core_hub_url: http://localhost:3000
-core_hub_web_url: http://localhost:3100
+base_url: http://localhost:3235       # ประตูเดียวคือ frontend (32xx) ซึ่งส่ง /api และ /auth ต่อไป backend (42xx)
+core_hub_url: https://csmju2030.jowave.com
+core_hub_web_url: https://csmju2030.jowave.com
 callback_path: /auth/callback         # ต้องตรงกับ callback_url ที่ลงทะเบียนไว้
 
 public_endpoints:
@@ -50,6 +51,7 @@ ui:
     - { label: "ผู้ช่วยวิชาการ", path: "/" }
     - { label: "กระทู้ถามตอบ", path: "/questions" }
     - { label: "ทำเนียบอาจารย์", path: "/faculty" }
+    - { label: "ภาพรวม", path: "/stats" }
     - { label: "ข้อมูลของฉัน", path: "/profiles/me" }
   # ของที่ design system ยังไม่มี ทำเองชั่วคราวใน frontend/src — รอส่งคำขอตามข้อ 17.4
   local_components:
@@ -58,5 +60,5 @@ ui:
     - { name: "Avatar", path: "frontend/src/components/shared/Avatar.tsx", issue: "" }
 
 owners:
-  pl: "@csmju2030/pl-csmju-helpdesk"
-  aie: "@csmju2030/aie-csmju-helpdesk"
+  pl: "@csmju2030/pl-csmju-study-qa"
+  aie: "@csmju2030/aie-csmju-study-qa"

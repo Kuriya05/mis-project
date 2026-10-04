@@ -18,6 +18,8 @@ export enum Permission {
   QUESTION_DELETE_OWN = 'question:delete:own',
   QUESTION_DELETE_ANY = 'question:delete:any',
   QUESTION_VOTE = 'question:vote',
+  /** Save a question to read later - every role, alumni included. */
+  QUESTION_BOOKMARK = 'question:bookmark',
 
   COMMENT_CREATE = 'comment:create',
   COMMENT_UPDATE_OWN = 'comment:update:own',
@@ -32,17 +34,16 @@ export enum Permission {
   TAG_READ = 'tag:read',
 
   PROFILE_READ_OWN = 'profile:read:own',
-  PROFILE_UPDATE_OWN = 'profile:update:own',
 
   SAMPLE_DATA_LOAD = 'sample-data:load',
 }
 
-/** Alumni and every other role can browse the board and manage their own profile. */
+/** Alumni and every other role can browse the board and see their own profile. */
 const READ_PERMISSIONS: Permission[] = [
   Permission.QUESTION_READ,
+  Permission.QUESTION_BOOKMARK,
   Permission.TAG_READ,
   Permission.PROFILE_READ_OWN,
-  Permission.PROFILE_UPDATE_OWN,
 ];
 
 const PARTICIPANT_PERMISSIONS: Permission[] = [

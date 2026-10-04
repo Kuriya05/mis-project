@@ -1,6 +1,6 @@
 // ตัวกรองของหน้ารวมกระทู้ ที่เก็บไว้ใน URL: /questions?tab=mine&tag=Java&q=text
 
-export const FORUM_TABS = ["all", "mine", "unanswered"] as const;
+export const FORUM_TABS = ["all", "mine", "unanswered", "resolved", "popular", "saved"] as const;
 export type ForumTab = (typeof FORUM_TABS)[number];
 
 export interface ForumFilters {

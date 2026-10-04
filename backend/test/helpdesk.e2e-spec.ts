@@ -10,12 +10,17 @@ describe('Helpdesk API (e2e)', () => {
   let app: NestExpressApplication;
   let coreHub: FakeCoreHub;
   let key: TestSigningKey;
-  const tokens: Record<'student' | 'other' | 'staff' | 'admin' | 'alumni', string> = {
+  const tokens: Record<
+    'student' | 'other' | 'staff' | 'admin' | 'alumni' | 'lecturer' | 'guest',
+    string
+  > = {
     student: '',
     other: '',
     staff: '',
     admin: '',
     alumni: '',
+    lecturer: '',
+    guest: '',
   };
 
   const http = () => request(app.getHttpServer());
@@ -53,6 +58,13 @@ describe('Helpdesk API (e2e)', () => {
     tokens.staff = await sign('user-003', 'staff@core.local', 'staff');
     tokens.admin = await sign('user-001', 'admin@core.local', 'admin');
     tokens.alumni = await sign('user-004', 'alumni@core.local', 'alumni');
+    tokens.lecturer = await sign('user-005', 'lecturer@core.local', 'lecturer');
+    tokens.guest = await sign('user-006', 'guest@core.local', 'guest');
+
+    // Only the student's account is linked to a person in Core Hub.
+    coreHub.setPeople({
+      'user-002': { personCode: '6599000002', firstName: 'ไม่ถูกเก็บ', email: 'student@core.local' },
+    });
 
     app = await bootApp();
   });
@@ -99,34 +111,63 @@ describe('Helpdesk API (e2e)', () => {
   });
 
   describe('profiles', () => {
-    it('creates the profile on first sight with the e-mail local part as name', async () => {
+    it('creates the profile on first sight with person_code from Core Hub and no name', async () => {
       const res = await http().get('/api/v1/profiles/me').set(as('student')).expect(200);
       expect(res.body.data).toEqual(
         expect.objectContaining({
           coreUserId: 'user-002',
-          displayName: 'student',
+          personCode: '6599000002',
           coreRole: 'student',
           subsystemRole: 'STUDENT',
           permissions: expect.arrayContaining(['question:create']),
           session: { expiresAt: expect.any(String) },
         }),
       );
+      expect(res.body.data).not.toHaveProperty('displayName');
+      expect(coreHub.lastPeopleAuthorization).toBe(`Bearer ${tokens.student}`);
     });
 
-    it('lets the user rename themselves, trimmed and length-checked', async () => {
-      const res = await http()
-        .patch('/api/v1/profiles/me')
-        .set(as('student'))
-        .send({ displayName: '  นักศึกษาปริศนา  ' })
-        .expect(200);
-      expect(res.body.data.displayName).toBe('นักศึกษาปริศนา');
+    it('asks Core Hub only until person_code is known', async () => {
+      await http().get('/api/v1/profiles/me').set(as('student')).expect(200);
+      const calls = coreHub.peopleRequests;
+      await http().get('/api/v1/profiles/me').set(as('student')).expect(200);
+      expect(coreHub.peopleRequests).toBe(calls);
+    });
 
-      await http().patch('/api/v1/profiles/me').set(as('student')).send({ displayName: ' ' }).expect(400);
+    it('leaves person_code null for an account linked to no person', async () => {
+      const res = await http().get('/api/v1/profiles/me').set(as('other')).expect(200);
+      expect(res.body.data.personCode).toBeNull();
+    });
+
+    it('still answers while Core Hub cannot, and shows the role instead', async () => {
+      coreHub.peopleFailure = { status: 503 };
+      try {
+        const res = await http().get('/api/v1/profiles/me').set(as('student')).expect(200);
+        expect(res.body.data.personCode).toBeNull();
+      } finally {
+        coreHub.peopleFailure = null;
+      }
+    });
+
+    it('accepts every Core Hub role: lecturer as staff, guest as read-only', async () => {
+      const lecturer = await http().get('/api/v1/profiles/me').set(as('lecturer')).expect(200);
+      expect(lecturer.body.data).toEqual(
+        expect.objectContaining({ coreRole: 'lecturer', subsystemRole: 'STAFF' }),
+      );
+
+      const guest = await http().get('/api/v1/profiles/me').set(as('guest')).expect(200);
+      expect(guest.body.data).toEqual(
+        expect.objectContaining({ coreRole: 'guest', subsystemRole: 'ALUMNI', personCode: null }),
+      );
       await http()
-        .patch('/api/v1/profiles/me')
-        .set(as('student'))
-        .send({ displayName: 'x', coreUserId: 'user-001' })
-        .expect(400);
+        .post('/api/v1/questions')
+        .set(as('guest'))
+        .send({ title: 'ถามได้ไหม', body: 'ผู้เยี่ยมชม' })
+        .expect(403);
+    });
+
+    it('has no endpoint to rename yourself', async () => {
+      await http().patch('/api/v1/profiles/me').set(as('student')).send({ displayName: 'x' }).expect(404);
     });
   });
 
@@ -138,7 +179,7 @@ describe('Helpdesk API (e2e)', () => {
           title: 'NestJS ต่อ PostgreSQL ไม่ได้',
           status: 'WAITING',
           tags: ['Database', 'Error', 'NestJS'],
-          author: { id: expect.any(String), displayName: 'student', coreRole: 'student' },
+          author: { id: expect.any(String), personCode: '6599000002', coreRole: 'student', isAssistant: false },
           voteCount: 0,
           hasVoted: false,
           commentCount: 0,
@@ -207,6 +248,27 @@ describe('Helpdesk API (e2e)', () => {
       const page = await http().get('/api/v1/questions?page=2&limit=1').set(as('student')).expect(200);
       expect(page.body.data.map((q: { id: string }) => q.id)).toEqual([mine.id]);
       expect(page.body.meta).toEqual({ total: 2, page: 2, limit: 1, totalPages: 2 });
+    });
+
+    it('sorts by popularity: most votes, then most answers, then newest', async () => {
+      // created oldest to newest, so popularity has to reverse the default order
+      const voted = await ask('student', { title: 'กระทู้ยอดนิยม', body: 'มีคนโหวต' });
+      const answered = await ask('student', { title: 'กระทู้มีคนตอบ', body: 'มีคำตอบสองข้อ' });
+      const quiet = await ask('student', { title: 'กระทู้เงียบ', body: 'ยังไม่มีใครสนใจ' });
+      await answer('staff', answered.id);
+      await answer('other', answered.id);
+      await http().post(`/api/v1/questions/${voted.id}/votes`).set(as('other')).expect(201);
+
+      const ids = async (query: string) =>
+        (await http().get(`/api/v1/questions?${query}`).set(as('student')).expect(200)).body.data.map(
+          (q: { id: string }) => q.id,
+        );
+      expect(await ids('sort=popular')).toEqual([voted.id, answered.id, quiet.id]);
+      expect(await ids('sort=newest')).toEqual([quiet.id, answered.id, voted.id]);
+      expect(await ids('')).toEqual([quiet.id, answered.id, voted.id]);
+
+      const bad = await http().get('/api/v1/questions?sort=random').set(as('student')).expect(400);
+      expect(bad.body.error.code).toBe('VALIDATION_ERROR');
     });
 
     it('lets only the author (or admin) edit and delete', async () => {

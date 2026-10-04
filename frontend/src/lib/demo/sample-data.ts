@@ -1,16 +1,16 @@
 import type { CoreRole } from "../types";
-import { DEMO_DEFAULT_NAME, DEMO_USER_ID } from "./profile";
+import { DEMO_PERSON_CODE, DEMO_USER_ID } from "./profile";
 
 // สำเนาข้อมูลตัวอย่างชุดเดียวกับ backend/src/sample-data/sample-data.ts ใช้ในโหมดตัวอย่างเท่านั้น
 // wannapa คือผู้ใช้สมมติที่ล็อกอินอยู่ (ดู profile.ts)
 export const PROFILES = {
-  teacher: { id: "demo-teacher", coreRole: "staff", displayName: "อาจารย์สมศักดิ์" },
-  anon: { id: "demo-anon", coreRole: "student", displayName: "นักศึกษาปริศนา" },
-  wannapa: { id: DEMO_USER_ID, coreRole: "student", displayName: DEMO_DEFAULT_NAME },
-  somchai: { id: "demo-somchai", coreRole: "student", displayName: "Somchai R." },
-  thanakorn: { id: "demo-thanakorn", coreRole: "student", displayName: "Thanakorn K." },
-  anan: { id: "demo-anan", coreRole: "student", displayName: "Anan P." },
-} as const satisfies Record<string, { id: string; coreRole: CoreRole; displayName: string }>;
+  teacher: { id: "demo-teacher", coreRole: "lecturer", personCode: "sample.lecturer" },
+  anon: { id: "demo-anon", coreRole: "student", personCode: "6599000002" },
+  wannapa: { id: DEMO_USER_ID, coreRole: "student", personCode: DEMO_PERSON_CODE },
+  somchai: { id: "demo-somchai", coreRole: "student", personCode: "6599000012" },
+  thanakorn: { id: "demo-thanakorn", coreRole: "student", personCode: "6599000013" },
+  anan: { id: "demo-anan", coreRole: "student", personCode: "6599000014" },
+} as const satisfies Record<string, { id: string; coreRole: CoreRole; personCode: string }>;
 export type ProfileKey = keyof typeof PROFILES;
 
 export type SeedComment = {

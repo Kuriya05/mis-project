@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AssistantAnswerService } from '../assistant/assistant-answer.service';
 import { Prisma, QuestionStatus } from '../../generated/prisma/client';
 import { CoreHubIdentity } from '../auth/core-hub-identity';
 import { Permission } from '../auth/permissions';
@@ -27,6 +28,11 @@ export interface VoteState {
   hasVoted: boolean;
 }
 
+export interface BookmarkState {
+  id: string;
+  isBookmarked: boolean;
+}
+
 @Injectable()
 export class QuestionsService {
   constructor(
@@ -34,6 +40,7 @@ export class QuestionsService {
     private readonly profiles: ProfilesService,
     private readonly tags: TagsService,
     private readonly ownership: OwnershipPolicy,
+    private readonly assistantAnswers: AssistantAnswerService,
   ) {}
 
   async findAll(
@@ -63,8 +70,15 @@ export class QuestionsService {
     if (query.mine) {
       filters.push({ authorId: viewer.id });
     }
+    if (query.bookmarked) {
+      filters.push({ bookmarks: { some: { profileId: viewer.id } } });
+    }
     if (query.unanswered) {
-      filters.push({ status: QuestionStatus.WAITING, comments: { none: {} } });
+      // the AI assistant answers every new question, so only a person's answer takes it off this list
+      filters.push({
+        status: QuestionStatus.WAITING,
+        comments: { none: { author: { isAssistant: false } } },
+      });
     }
 
     const where: Prisma.QuestionWhereInput = { AND: filters };
@@ -72,7 +86,15 @@ export class QuestionsService {
       this.prisma.question.findMany({
         where,
         select: questionSummarySelect(viewer.id),
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy:
+          query.sort === 'popular'
+            ? [
+                { votes: { _count: 'desc' } },
+                { comments: { _count: 'desc' } },
+                { createdAt: 'desc' },
+                { id: 'desc' },
+              ]
+            : [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: query.skip,
         take: query.take,
       }),
@@ -87,8 +109,12 @@ export class QuestionsService {
     return this.detail(id, viewer.id);
   }
 
-  async create(user: CoreHubIdentity, dto: CreateQuestionDto): Promise<QuestionDetailView> {
-    const author = await this.profiles.ensure(user);
+  async create(
+    user: CoreHubIdentity,
+    token: string,
+    dto: CreateQuestionDto,
+  ): Promise<QuestionDetailView> {
+    const author = await this.profiles.ensure(user, token);
     const requested = normalizeTagNames(dto.tags ?? []);
     const tagNames = requested.length > 0 ? requested : suggestTags(dto.title, dto.body);
 
@@ -106,6 +132,8 @@ export class QuestionsService {
       return question.id;
     });
 
+    // ถามซ้ำกระทู้เดิม: ผู้ช่วย AI ตอบให้เบื้องหลัง (ไม่รอ ไม่ทำให้การตั้งกระทู้ล้ม)
+    this.assistantAnswers.answerInBackground(id);
     return this.detail(id, author.id);
   }
 
@@ -164,6 +192,24 @@ export class QuestionsService {
     return this.voteState(id, voter.id);
   }
 
+  /** Save a question to read later. Saving twice keeps one bookmark. */
+  async bookmark(user: CoreHubIdentity, id: string): Promise<BookmarkState> {
+    const viewer = await this.profiles.ensure(user);
+    await this.ownerOf(id);
+    await this.prisma.questionBookmark.createMany({
+      data: [{ questionId: id, profileId: viewer.id }],
+      skipDuplicates: true,
+    });
+    return { id, isBookmarked: true };
+  }
+
+  async unbookmark(user: CoreHubIdentity, id: string): Promise<BookmarkState & { deleted: true }> {
+    const viewer = await this.profiles.ensure(user);
+    await this.ownerOf(id);
+    await this.prisma.questionBookmark.deleteMany({ where: { questionId: id, profileId: viewer.id } });
+    return { id, isBookmarked: false, deleted: true };
+  }
+
   async unvote(user: CoreHubIdentity, id: string): Promise<VoteState & { deleted: true }> {
     const voter = await this.profiles.ensure(user);
     await this.ownerOf(id);
@@ -179,7 +225,17 @@ export class QuestionsService {
     if (!row) {
       throw AppException.notFound('Question not found');
     }
-    return toQuestionDetailView(row);
+
+    // กระทู้เดิมที่ผู้ช่วย AI อ้างถึง: ดึงชื่อทีเดียว · กระทู้ที่ถูกลบไปแล้วจะไม่แสดง
+    const relatedIds = [...new Set(row.comments.flatMap((c) => c.relatedQuestionIds))];
+    const related =
+      relatedIds.length === 0
+        ? []
+        : await this.prisma.question.findMany({
+            where: { id: { in: relatedIds } },
+            select: { id: true, title: true },
+          });
+    return toQuestionDetailView(row, new Map(related.map((q) => [q.id, q.title])));
   }
 
   private async ownerOf(id: string) {

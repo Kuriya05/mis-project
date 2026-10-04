@@ -15,7 +15,7 @@ export class HealthController {
   check() {
     return {
       status: 'ok',
-      service: this.config.get<string>('subsystemId', 'csmju-helpdesk'),
+      service: this.config.get<string>('subsystemId', 'csmju-study-qa'),
     };
   }
 }

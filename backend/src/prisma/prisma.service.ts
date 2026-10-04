@@ -38,7 +38,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         10_000,
       ),
 
-      application_name: config.get<string>('subsystemId', 'csmju-helpdesk'),
+      application_name: config.get<string>('subsystemId', 'csmju-study-qa'),
     });
 
     super({ adapter });

@@ -2,7 +2,7 @@
 # build context คือ "รากของ repo" เพราะ pnpm workspace เก็บ lockfile ไว้ที่ราก
 #   docker build -f backend/Dockerfile .
 # image เดียวให้บริการทั้ง API และหน้าเว็บ (Next.js standalone) บน origin เดียวกัน:
-# backend รับทุก request ที่ :3002 แล้วส่งหน้าเว็บต่อให้ Next server ที่ 127.0.0.1:3102
+# backend รับทุก request ที่ :4235 แล้วส่งหน้าเว็บต่อให้ Next server ที่ 127.0.0.1:3235
 FROM node:22-alpine AS builder
 
 WORKDIR /app
@@ -48,10 +48,10 @@ RUN chmod +x ./backend/docker/entrypoint.sh && chown -R node:node /app
 USER node
 WORKDIR /app/backend
 
-ENV PORT=3002 \
-    FRONTEND_URL=http://127.0.0.1:3102 \
-    BACKEND_URL=http://127.0.0.1:3002
-EXPOSE 3002
+ENV PORT=4235 \
+    FRONTEND_URL=http://127.0.0.1:3235 \
+    BACKEND_URL=http://127.0.0.1:4235
+EXPOSE 4235
 
 ENTRYPOINT ["./docker/entrypoint.sh"]
 CMD ["node", "dist/src/main.js"]

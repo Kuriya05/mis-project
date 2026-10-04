@@ -78,9 +78,10 @@ describe('configuration', () => {
   });
 
   describe('coreHub.webUrl', () => {
-    it('defaults to the Core Hub web app on this machine', () => {
+    it('defaults to CORE_HUB_URL, where the real server serves both', () => {
       delete process.env.CORE_HUB_WEB_URL;
-      expect(configuration().coreHub.webUrl).toBe('http://localhost:3100');
+      process.env.CORE_HUB_URL = 'https://hub.example/';
+      expect(configuration().coreHub.webUrl).toBe('https://hub.example');
     });
 
     it('is read from CORE_HUB_WEB_URL', () => {
@@ -89,37 +90,6 @@ describe('configuration', () => {
     });
   });
 
-  describe('sso', () => {
-    it('keeps the state cookie for 10 minutes by default', () => {
-      delete process.env.SSO_STATE_TTL_SEC;
-      expect(configuration().sso.stateTtlSec).toBe(600);
-    });
-
-    it('never lets the state cookie outlive the 600 second cap', () => {
-      process.env.SSO_STATE_TTL_SEC = '3600';
-      expect(configuration().sso.stateTtlSec).toBe(600);
-
-      process.env.SSO_STATE_TTL_SEC = '120';
-      expect(configuration().sso.stateTtlSec).toBe(120);
-    });
-
-    it('only accepts a same-origin post-login redirect outside /auth', () => {
-      process.env.SSO_POST_LOGIN_REDIRECT = '/dashboard';
-      expect(configuration().sso.postLoginRedirect).toBe('/dashboard');
-
-      const backslash = String.fromCharCode(92);
-      for (const unsafe of [
-        'https://evil.example/',
-        '//evil.example',
-        `/${backslash}evil.example`,
-        'dashboard',
-        '/auth/login',
-      ]) {
-        process.env.SSO_POST_LOGIN_REDIRECT = unsafe;
-        expect(configuration().sso.postLoginRedirect).toBe('/');
-      }
-    });
-  });
 
   describe('database ceilings', () => {
     it('ships bounded defaults', () => {

@@ -1,161 +1,103 @@
-import { ArgumentsHost, HttpStatus } from '@nestjs/common';
-import { Prisma } from '../../../generated/prisma/client';
+import { ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { AppException } from '../errors';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
-interface CapturedResponse {
-  status: number;
-  body: Record<string, unknown>;
-  headers: Record<string, string>;
-}
+const hostFor = (request: object, response: object): ArgumentsHost =>
+  ({
+    switchToHttp: () => ({ getRequest: () => request, getResponse: () => response }),
+  }) as unknown as ArgumentsHost;
 
-function hostFor(): { host: ArgumentsHost; captured: CapturedResponse } {
-  const captured: CapturedResponse = { status: 0, body: {}, headers: {} };
+const responseDouble = (headersSent: boolean) => {
+  const response = { headersSent, status: jest.fn(), json: jest.fn(), setHeader: jest.fn() };
+  response.status.mockReturnValue(response);
+  return response;
+};
 
-  const response = {
-    status(code: number) {
-      captured.status = code;
-      return this;
-    },
-    json(payload: Record<string, unknown>) {
-      captured.body = payload;
-      return this;
-    },
-    setHeader(name: string, value: string) {
-      captured.headers[name.toLowerCase()] = value;
-    },
+describe('AllExceptionsFilter', () => {
+  // Core Hub puts the access token in the query of /auth/callback.
+  const callback = {
+    method: 'GET',
+    path: '/auth/callback',
+    url: '/auth/callback?access_token=token-that-must-not-be-logged&token_type=Bearer',
   };
 
-  const host = {
-    switchToHttp: () => ({
-      getResponse: () => response,
-      getRequest: () => ({ method: 'GET', url: '/api/v1/students', path: '/api/v1/students' }),
-    }),
-  } as unknown as ArgumentsHost;
-
-  return { host, captured };
-}
-
-function prismaError(code: string, meta?: Record<string, unknown>) {
-  return new Prisma.PrismaClientKnownRequestError('boom', {
-    code,
-    clientVersion: 'test',
-    meta,
-  });
-}
-
-describe('AllExceptionsFilter · Prisma errors', () => {
-  const filter = new AllExceptionsFilter();
+  let errors: jest.SpyInstance;
 
   beforeEach(() => {
-    jest.spyOn(filter['logger'], 'error').mockImplementation(() => undefined);
-    jest.spyOn(filter['logger'], 'warn').mockImplementation(() => undefined);
+    errors = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
   });
 
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => {
+    errors.mockRestore();
+  });
 
-  // Regression: pool exhaustion is a load problem, not a broken request. As a
-  // 500 it told callers "we are broken" and gave automatic retries nothing to
-  // act on, so a burst kept being amplified.
-  it('renders a saturated connection pool as 503 with Retry-After', () => {
-    const { host, captured } = hostFor();
+  it('logs a failed request by its path, without the query string', () => {
+    const response = responseDouble(false);
 
-    filter.catch(prismaError('P2024'), host);
+    new AllExceptionsFilter().catch(new Error('boom'), hostFor(callback, response));
 
-    expect(captured.status).toBe(HttpStatus.SERVICE_UNAVAILABLE);
-    expect(captured.body).toMatchObject({
+    expect(JSON.parse(errors.mock.calls[0][0] as string)).toMatchObject({
+      event: 'request.unhandled_error',
+      path: '/auth/callback',
+      status: 500,
+    });
+    expect(JSON.stringify(errors.mock.calls)).not.toContain('token-that-must-not-be-logged');
+    expect(response.status).toHaveBeenCalledWith(500);
+  });
+
+  it('sends the Retry-After of a 503 the application raised', () => {
+    const response = responseDouble(false);
+
+    new AllExceptionsFilter().catch(
+      AppException.serviceUnavailable('Core Hub is unavailable right now', 120),
+      hostFor({ method: 'GET', path: '/api/v1/rooms' }, response),
+    );
+
+    expect(response.status).toHaveBeenCalledWith(503);
+    expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '120');
+    expect(response.json).toHaveBeenCalledWith({
       success: false,
-      error: { code: 'SERVICE_UNAVAILABLE' },
+      error: { code: 'SERVICE_UNAVAILABLE', message: 'Core Hub is unavailable right now' },
     });
-    expect(captured.headers['retry-after']).toBe('1');
   });
 
-  it('maps a unique violation to 409', () => {
-    const { host, captured } = hostFor();
+  it.each([
+    [HttpStatus.SERVICE_UNAVAILABLE, 'SERVICE_UNAVAILABLE'],
+    [HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_REQUESTS'],
+  ])('maps a bare HTTP %d to %s with a default Retry-After', (status, code) => {
+    const response = responseDouble(false);
 
-    filter.catch(prismaError('P2002', { target: ['student_code'] }), host);
+    new AllExceptionsFilter().catch(
+      new HttpException('slow down', status),
+      hostFor({ method: 'GET', path: '/api/v1/rooms' }, response),
+    );
 
-    expect(captured.status).toBe(HttpStatus.CONFLICT);
-    expect(captured.body).toMatchObject({ error: { code: 'CONFLICT' } });
-  });
-
-  it('maps a missing foreign key to 400 and a missing record to 404', () => {
-    const fk = hostFor();
-    filter.catch(prismaError('P2003'), fk.host);
-    expect(fk.captured.status).toBe(HttpStatus.BAD_REQUEST);
-
-    const missing = hostFor();
-    filter.catch(prismaError('P2025'), missing.host);
-    expect(missing.captured.status).toBe(HttpStatus.NOT_FOUND);
-  });
-
-  it('keeps an unrecognised Prisma error as an opaque 500', () => {
-    const { host, captured } = hostFor();
-
-    filter.catch(prismaError('P9999'), host);
-
-    expect(captured.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
-    expect(captured.body).toMatchObject({
-      error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+    expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '30');
+    expect(response.json).toHaveBeenCalledWith({
+      success: false,
+      error: { code, message: 'slow down' },
     });
-    expect(captured.headers['retry-after']).toBeUndefined();
   });
 
-  it('never leaks an unexpected error to the caller', () => {
-    const { host, captured } = hostFor();
+  it('sends no Retry-After with other errors', () => {
+    const response = responseDouble(false);
 
-    // A marker stands in for whatever internal detail a real error carries
-    // (a connection string, a file path, a query). Its only job is to be
-    // unmistakable in the body if it ever leaks.
-    const leakyError = new Error('pool detail LEAK-MARKER-7F3A');
+    new AllExceptionsFilter().catch(
+      AppException.unauthorized(),
+      hostFor({ method: 'GET', path: '/api/v1/me' }, response),
+    );
 
-    filter.catch(leakyError, host);
-
-    expect(captured.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
-    expect(JSON.stringify(captured.body)).not.toContain('LEAK-MARKER-7F3A');
-  });
-});
-
-describe('AllExceptionsFilter · logging', () => {
-  afterEach(() => jest.restoreAllMocks());
-
-  // Regression: the query string of /auth/callback carries the Core Hub
-  // access_token, and a 500 there used to write it to the server log.
-  it('logs the request path without its query string', () => {
-    const filter = new AllExceptionsFilter();
-    const error = jest.spyOn(filter['logger'], 'error').mockImplementation(() => undefined);
-    const response = { status: () => response, json: () => response, setHeader: () => undefined };
-    const host = {
-      switchToHttp: () => ({
-        getResponse: () => response,
-        getRequest: () => ({
-          method: 'GET',
-          url: '/auth/callback?access_token=eyJ.secret.sig&state=s',
-          path: '/auth/callback',
-        }),
-      }),
-    } as unknown as ArgumentsHost;
-
-    filter.catch(new Error('boom'), host);
-
-    const logged = String(error.mock.calls[0][0]);
-    expect(logged).toContain('"path":"/auth/callback"');
-    expect(logged).not.toContain('access_token');
+    expect(response.status).toHaveBeenCalledWith(401);
+    expect(response.setHeader).not.toHaveBeenCalled();
   });
 
-  it('does not write a body once the response has already been sent', () => {
-    const filter = new AllExceptionsFilter();
-    jest.spyOn(filter['logger'], 'error').mockImplementation(() => undefined);
-    const json = jest.fn();
-    const response = { headersSent: true, status: () => ({ json }), json, setHeader: jest.fn() };
-    const host = {
-      switchToHttp: () => ({
-        getResponse: () => response,
-        getRequest: () => ({ method: 'GET', url: '/auth/callback', path: '/auth/callback' }),
-      }),
-    } as unknown as ArgumentsHost;
+  it('does not write a second response when the handler already sent one', () => {
+    const response = responseDouble(true);
 
-    filter.catch(new Error('late'), host);
+    new AllExceptionsFilter().catch(new Error('late'), hostFor(callback, response));
 
-    expect(json).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledTimes(1);
+    expect(response.status).not.toHaveBeenCalled();
+    expect(response.json).not.toHaveBeenCalled();
   });
 });

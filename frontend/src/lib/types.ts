@@ -1,6 +1,6 @@
 // รูปแบบข้อมูลที่ API ของ backend ส่งกลับมา (JSON เป็น camelCase ตาม api-conventions.md)
 
-export type CoreRole = "student" | "alumni" | "staff" | "admin";
+export type CoreRole = "student" | "alumni" | "lecturer" | "staff" | "guest" | "admin";
 
 export type Permission =
   | "question:read"
@@ -10,6 +10,7 @@ export type Permission =
   | "question:delete:own"
   | "question:delete:any"
   | "question:vote"
+  | "question:bookmark"
   | "comment:create"
   | "comment:update:own"
   | "comment:update:any"
@@ -20,15 +21,15 @@ export type Permission =
   | "comment:verify:any"
   | "tag:read"
   | "profile:read:own"
-  | "profile:update:own"
   | "sample-data:load";
 
-/** GET/PATCH /api/v1/profiles/me */
+/** GET /api/v1/profiles/me */
 export interface MyProfile {
   id: string;
   coreUserId: string;
   email: string;
-  displayName: string;
+  /** รหัสบุคคลจาก Core Hub · null = บัญชีไม่ผูกกับบุคคล */
+  personCode: string | null;
   coreRole: CoreRole;
   subsystemRole: string;
   permissions: Permission[];
@@ -39,8 +40,10 @@ export interface MyProfile {
 
 export interface Author {
   id: string;
-  displayName: string;
+  personCode: string | null;
   coreRole: CoreRole;
+  /** ผู้ช่วย AI ของระบบ ไม่ใช่คน */
+  isAssistant: boolean;
 }
 
 export type QuestionStatus = "WAITING" | "RESOLVED";
@@ -53,6 +56,8 @@ export interface QuestionSummary {
   author: Author;
   voteCount: number;
   hasVoted: boolean;
+  /** ผู้ดูบันทึกกระทู้นี้ไว้อ่านทีหลัง */
+  isBookmarked: boolean;
   commentCount: number;
   editedAt: string | null;
   createdAt: string;
@@ -65,6 +70,10 @@ export interface Comment {
   parentId: string | null;
   body: string;
   isVerified: boolean;
+  /** คำตอบของผู้ช่วย AI: id อาจารย์ในทำเนียบ (data/faculty.ts) ทุกคนที่ถนัดเรื่องนี้ เรียงจากตรงที่สุด */
+  recommendedFacultyIds: string[];
+  /** คำตอบของผู้ช่วย AI: กระทู้เดิมที่ถามเรื่องเดียวกัน */
+  relatedQuestions: { id: string; title: string }[];
   author: Author;
   voteCount: number;
   hasVoted: boolean;
@@ -115,4 +124,31 @@ export type ErrorCode =
 export interface ErrorEnvelope {
   success: false;
   error: { code: ErrorCode | string; message: string; details?: { field?: string } & Record<string, unknown> };
+}
+
+/** GET /api/v1/profiles/me/activity — คำตอบที่คนอื่น (รวมผู้ช่วย AI) เขียนในกระทู้ของเรา */
+export interface ActivityItem {
+  id: string;
+  kind: "answer" | "reply";
+  questionId: string;
+  questionTitle: string;
+  author: Author;
+  excerpt: string;
+  isVerified: boolean;
+  isNew: boolean;
+  createdAt: string;
+}
+
+export interface Activity {
+  unreadCount: number;
+  seenAt: string | null;
+  items: ActivityItem[];
+}
+
+/** GET /api/v1/stats */
+export interface BoardStats {
+  totals: { questions: number; resolved: number; answers: number; assistantAnswers: number };
+  topTags: { name: string; count: number }[];
+  weekly: { weekStart: string; questions: number; answers: number }[];
+  topHelpers: { author: Author; answers: number; verifiedAnswers: number }[];
 }

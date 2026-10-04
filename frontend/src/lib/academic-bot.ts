@@ -1,4 +1,5 @@
 import { api, unwrap } from "./api";
+import { authorLabel } from "./permissions";
 import type { QuestionSummary, SuccessEnvelope } from "./types";
 
 // ตรรกะตอบคำถามของบอทวิชาการ ใช้ร่วมกันทั้งหน้าผู้ช่วยวิชาการ (/) และหน้าต่างแชทลอย (ChatSupport)
@@ -43,6 +44,8 @@ export interface BotReply {
   forumQuery?: string;
   /** ค้นกระทู้แล้วไม่พบ — UI ชวนตั้งคำถามใหม่ */
   suggestAsk?: boolean;
+  /** คำตอบจากผู้ช่วย AI (Gemini) — UI บอกผู้ใช้ว่าเป็นคำตอบจาก AI */
+  fromAssistant?: boolean;
 }
 
 export type BotMessage = BotReply & { id: string };
@@ -86,13 +89,21 @@ export const DEFAULT_QUICK_REPLIES = [
   "[ประกันอุบัติเหตุกลุ่ม]",
 ] as const;
 
+/** ตัวอย่างคำถามให้ผู้ช่วย AI (ไม่อยู่ในวงเล็บเหลี่ยม จึงส่งไปให้ AI ตอบ) */
+export const AI_SUGGESTIONS = [
+  "อยากทำโปรเจกต์ IoT ควรปรึกษาอาจารย์ท่านไหน",
+  "แนะนำวิธีเริ่มเรียน Machine Learning",
+  "อธิบาย REST API แบบเข้าใจง่าย",
+  "ทุนปันน้ำใจฯ ต้องมีคุณสมบัติอะไรบ้าง",
+] as const;
+
 /** ข้อความต้อนรับเมื่อเปิดแชท */
 export const WELCOME_MESSAGES: BotMessage[] = [
   { id: "welcome-mascot", sender: "bot", isMascot: true },
   {
     id: "welcome-text",
     sender: "bot",
-    text: "สวัสดีครับ ยินดีต้อนรับสู่ระบบแนะนำข้อมูลวิชาการและสารสนเทศ มหาวิทยาลัยแม่โจ้\n\nผมยินดีให้ข้อมูลเกี่ยวกับ:\n• หลักสูตร วท.บ. วิทยาการคอมพิวเตอร์ (หลักสูตรปรับปรุง พ.ศ. 2570 / รหัส 70)\n• โครงสร้างหลักสูตร 120–124 หน่วยกิต & 4 Tracks อาชีพ\n• ค่าธรรมเนียมการศึกษา (ค่าเทอม 20,000 บาท)\n• ทุนการศึกษา “ปันน้ำใจพี่ให้น้อง” ครั้งที่ 5 (ทุนต่อเนื่อง & ไม่ต่อเนื่อง)\n• ปฏิทินการศึกษา มหาวิทยาลัยแม่โจ้ (PDF ทางการ)\n• การขอผ่อนผันทหาร ประจำปีการศึกษา 2569 (พร้อมรูปประกาศ)\n• ประกันอุบัติเหตุกลุ่ม มหาวิทยาลัยแม่โจ้ (เออร์โกประกันภัย พร้อมรูปข้อมูล)\n\nสามารถเลื่อนดูการ์ดข้อมูล & แตะดูรูปภาพ หรือคลิกเลือกปุ่มด้านล่างได้เลยครับ!",
+    text: "สวัสดีครับ ยินดีต้อนรับสู่ระบบแนะนำข้อมูลวิชาการและสารสนเทศ มหาวิทยาลัยแม่โจ้\n\nผมยินดีให้ข้อมูลเกี่ยวกับ:\n• หลักสูตร วท.บ. วิทยาการคอมพิวเตอร์ (หลักสูตรปรับปรุง พ.ศ. 2570 / รหัส 70)\n• โครงสร้างหลักสูตร 120–124 หน่วยกิต & 4 Tracks อาชีพ\n• ค่าธรรมเนียมการศึกษา (ค่าเทอม 20,000 บาท)\n• ทุนการศึกษา “ปันน้ำใจพี่ให้น้อง” ครั้งที่ 5 (ทุนต่อเนื่อง & ไม่ต่อเนื่อง)\n• ปฏิทินการศึกษา มหาวิทยาลัยแม่โจ้ (PDF ทางการ)\n• การขอผ่อนผันทหาร ประจำปีการศึกษา 2569 (พร้อมรูปประกาศ)\n• ประกันอุบัติเหตุกลุ่ม มหาวิทยาลัยแม่โจ้ (เออร์โกประกันภัย พร้อมรูปข้อมูล)\n\nสามารถเลื่อนดูการ์ดข้อมูล & แตะดูรูปภาพ หรือคลิกเลือกปุ่มด้านล่างได้เลยครับ!\n\n✨ **ถามอะไรก็ได้** — พิมพ์คำถามในช่องด้านล่าง ผู้ช่วย AI จะตอบเรื่องการเรียน การเขียนโปรแกรม และแนะนำอาจารย์ที่ถนัดเรื่องนั้นให้ครับ",
   },
   { id: "welcome-carousel", sender: "bot", isEduCarousel: true },
 ];
@@ -125,24 +136,99 @@ const INSURANCE_ALT = "ประกันอุบัติเหตุกลุ
 
 const THREAD_KEYWORDS = ["mongodb", "java", "react", "nestjs", "error"] as const;
 
-/** คำตอบจาก AI (POST /assistant/chat) หรือ null เมื่อไม่ได้ตั้ง key / เรียกไม่สำเร็จ */
-async function askAssistant(question: string): Promise<string | null> {
+/** ข้อความก่อนหน้าในแชท ส่งให้ AI เข้าใจบริบท (เช่น "แล้วทุนนี้สมัครยังไง") */
+export interface ChatTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+const HISTORY_TURNS = 8;
+
+/** คำตอบจากผู้ช่วย AI (POST /assistant/chat → Gemini) หรือ null เมื่อไม่ได้ตั้ง key / เรียกไม่สำเร็จ */
+async function askAssistant(question: string, history: ChatTurn[]): Promise<string | null> {
   try {
     const res = await fetch("/assistant/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question: question.trim().slice(0, 1000) }),
+      body: JSON.stringify({
+        question: question.trim().slice(0, 1000),
+        history: history.slice(-HISTORY_TURNS).map((t) => ({ role: t.role, text: t.text.slice(0, 1500) })),
+      }),
     });
     if (!res.ok) return null;
     const body = (await res.json()) as SuccessEnvelope<{ answer: string }>;
-    return body.data.answer || null;
+    return body.data.answer?.trim() || null;
   } catch {
     return null;
   }
 }
 
-/** คืนรายการข้อความตอบกลับของบอท (ยังไม่มี id) สำหรับข้อความที่ผู้ใช้พิมพ์ */
-export async function getBotReplies(textToSend: string): Promise<BotReply[]> {
+/** ปุ่มตัวเลือกและปุ่มบนการ์ดส่งข้อความในวงเล็บเหลี่ยม เช่น "[ปฏิทินการศึกษา MJU]" */
+function isButtonPrompt(text: string): boolean {
+  return /^\[[^\]]+\]$/.test(text.trim());
+}
+
+const FALLBACK_REPLY: BotReply = {
+  sender: "bot",
+  text: 'ขออภัยครับ บอทวิชาการยังไม่เข้าใจคำถามนี้\nคุณสามารถสอบถามเกี่ยวกับ:\n• "[หลักสูตร วิทยาการคอมพิวเตอร์ (รหัส 70)]" (โครงสร้าง 120–124 หน่วยกิต & 4 แทร็กอาชีพ)\n• "[ค่าเทอม วิทยาการคอมพิวเตอร์]" (คณะวิทยาศาสตร์ 20,000 บาท)\n• "[ทุนปันน้ำใจพี่ให้น้อง]" (ทุนต่อเนื่อง/ไม่ต่อเนื่อง)\n• "[ปฏิทินการศึกษา MJU]" (ดาวน์โหลดปฏิทิน มหาวิทยาลัยแม่โจ้)\n• "ผ่อนผันทหาร" (ประกาศการผ่อนผันเกณฑ์ทหาร ปี 2569 พร้อมรูปภาพ)\n• "ประกันอุบัติเหตุ" (ความคุ้มครอง & รายชื่อโรงพยาบาลคู่สัญญา พร้อมรูปภาพ)\nหรือเลือกคลิกจากปุ่มตัวเลือกด้านล่างได้เลยครับ!',
+};
+
+/**
+ * คืนรายการข้อความตอบกลับของบอท (ยังไม่มี id)
+ *
+ * - ปุ่ม (ข้อความใน [...]) → คำตอบที่เตรียมไว้ ชัดเจนและตรงกันทุกครั้ง
+ * - พิมพ์เอง → ผู้ช่วย AI (Gemini) ตอบจากข้อมูลของสาขา พร้อมกระทู้ที่เกี่ยวข้องบนเว็บบอร์ด
+ *   AI ใช้ไม่ได้ → คำตอบที่เตรียมไว้ตามคำสำคัญ → ข้อความแนะนำหัวข้อ
+ */
+export async function getBotReplies(textToSend: string, history: ChatTurn[] = []): Promise<BotReply[]> {
+  if (isButtonPrompt(textToSend)) {
+    return (await keywordReplies(textToSend)) ?? [FALLBACK_REPLY];
+  }
+
+  const [aiAnswer, threads] = await Promise.all([askAssistant(textToSend, history), forumReplies(textToSend)]);
+  if (aiAnswer) {
+    // แนบกระทู้ที่เกี่ยวข้องเฉพาะเมื่อค้นเจอ ("ไม่พบกระทู้" ต่อท้ายคำตอบของ AI ไม่ช่วยอะไร)
+    const found = threads?.filter((r) => r.searchResults?.length) ?? [];
+    return [{ sender: "bot", text: aiAnswer, fromAssistant: true }, ...found];
+  }
+  return (await keywordReplies(textToSend)) ?? threads ?? [FALLBACK_REPLY];
+}
+
+/**
+ * หัวข้อที่มีคำตอบเตรียมไว้ — ผู้ช่วย AI ใช้คำตอบเหล่านี้เป็นข้อมูลอ้างอิง (app/assistant/chat/route.ts)
+ * เพิ่มหัวข้อใหม่ใน keywordReplies แล้วต้องเพิ่มปุ่มของหัวข้อนั้นที่นี่ด้วย
+ */
+export const KNOWLEDGE_PROMPTS = [
+  "[หลักสูตร วิทยาการคอมพิวเตอร์ (รหัส 70)]",
+  "[จุดเน้นปรับปรุงหลักสูตร 70]",
+  "[วิชาเอกเลือก 4 แทร็ก]",
+  "[สหกิจศึกษา cwie]",
+  "[ค่าเทอม วิทยาการคอมพิวเตอร์]",
+  "[ทุนปันน้ำใจพี่ให้น้อง]",
+  "[คุณสมบัติผู้ขอทุน]",
+  "[วิธีสมัคร & หลักฐาน]",
+  "[ปฏิทินการศึกษา MJU]",
+  "[ผ่อนผันการชำระ]",
+  "[การขอผ่อนผันทหาร]",
+  "[ประกันอุบัติเหตุกลุ่ม]",
+  "[ช่องทางติดต่อ]",
+] as const;
+
+/** คำตอบที่เตรียมไว้ของหัวข้อหนึ่ง (ข้อความล้วน) — ใช้สร้างข้อมูลอ้างอิงให้ AI */
+export async function preparedAnswerText(prompt: string): Promise<string> {
+  const replies = (await keywordReplies(prompt)) ?? [];
+  return replies
+    .flatMap((r) => [
+      r.text,
+      r.actionLink && `${r.actionLink.title}: ${r.actionLink.url}`,
+      r.downloadLink && `${r.downloadLink.title}: ${r.downloadLink.url}`,
+    ])
+    .filter((part): part is string => Boolean(part))
+    .join("\n");
+}
+
+/** คำตอบที่เตรียมไว้ตามคำสำคัญ หรือ null เมื่อไม่ตรงหัวข้อไหน */
+async function keywordReplies(textToSend: string): Promise<BotReply[] | null> {
   const cleanText = textToSend.trim().toLowerCase();
   const has = (...words: string[]) => words.some((w) => cleanText.includes(w));
 
@@ -166,7 +252,6 @@ export async function getBotReplies(textToSend: string): Promise<BotReply[]> {
         sender: "bot",
         text: "หลักสูตร วิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์\n(หลักสูตรปรับปรุง พ.ศ. 2570 / รหัส 70) มหาวิทยาลัยแม่โจ้\n\nได้รับการออกแบบตามเกณฑ์มาตรฐานอุดมศึกษาฉบับใหม่ เน้นสมรรถนะการปฏิบัติงานจริง (Outcome-Based Education: OBE) และปรับปรุงเนื้อหาให้ทันต่อเทคโนโลยี AI และ Cloud Native\n\nโครงสร้างหลักสูตร (รวมตลอดหลักสูตรไม่น้อยกว่า 120–124 หน่วยกิต):\n\n1. หมวดวิชาศึกษาทั่วไป (General Education) ไม่น้อยกว่า 24–30 หน่วยกิต\n• กลุ่มทักษะการสื่อสารและภาษา (Thai/English): 6–9 หน่วยกิต\n• กลุ่มทักษะดิจิทัลและการรู้เท่าทันเทคโนโลยี: 6 หน่วยกิต\n• กลุ่มทักษะความเป็นผู้ประกอบการและการคิดเชิงนวัตกรรม: 6 หน่วยกิต\n• กลุ่มการพัฒนาสุขภาวะและความรับผิดชอบต่อสังคม: 6 หน่วยกิต\n\n2. หมวดวิชาเฉพาะ (Specialized Courses) ไม่น้อยกว่า 84–90 หน่วยกิต\n• กลุ่มวิชาแกน (Core Mathematics & Science): 12–15 หน่วยกิต\n• กลุ่มวิชาเอกบังคับ (Core CS Subjects): 42–45 หน่วยกิต\n• กลุ่มวิชาเอกเลือกตามเส้นทางอาชีพ (Tracks): 18–24 หน่วยกิต\n• กลุ่มวิชาการเรียนรู้เชิงบูรณาการกับการทำงาน (CWIE / Co-op): 6–7 หน่วยกิต\n\n3. หมวดวิชาเลือกเสรี (Free Electives) ไม่น้อยกว่า 6 หน่วยกิต",
       },
-      { sender: "bot", isEduCarousel: true },
     ];
   }
 
@@ -248,7 +333,6 @@ export async function getBotReplies(textToSend: string): Promise<BotReply[]> {
         sender: "bot",
         text: 'ข้อมูลอัตราค่าธรรมเนียมการศึกษา (ค่าเทอม):\n\n• **คณะวิทยาศาสตร์** มหาวิทยาลัยแม่โจ้\n• **สาขาวิชาวิทยาการคอมพิวเตอร์**\n• **ค่าเทอม: 20,000 บาท** / ภาคการศึกษา\n\nช่องทางการชำระเงิน:\n• สแกน QR Code / PromptPay ผ่านระบบ Mobile Banking ได้ทุกธนาคาร\n• พิมพ์ใบแจ้งยอด Pay-in นำไปชำระที่เคาน์เตอร์ธนาคารกรุงไทย หรือเคาน์เตอร์เซอร์วิส\n• หากมีความจำเป็น สามารถยื่นคำร้อง "ขอผ่อนผันค่าเทอม" ได้ภายใน 2 สัปดาห์แรกของภาคเรียนครับ',
       },
-      { sender: "bot", isEduCarousel: true },
     ];
   }
 
@@ -426,57 +510,51 @@ export async function getBotReplies(textToSend: string): Promise<BotReply[]> {
     ];
   }
 
-  // 8. ค้นหากระทู้บนเว็บบอร์ด
-  if (has(...THREAD_KEYWORDS, "กระทู้")) {
-    const queryKeyword = THREAD_KEYWORDS.find((k) => cleanText.includes(k)) ?? "";
-    try {
-      const threads = unwrap(
-        await api.get<SuccessEnvelope<QuestionSummary[]>>("/api/v1/questions", {
-          params: { ...(queryKeyword ? { q: queryKeyword } : {}), limit: 5 },
-        }),
-      );
+  return null;
+}
 
-      if (threads.length > 0) {
-        const listText = threads
-          .map((t, idx) => `${idx + 1}. **${t.title}** (โดย ${t.author.displayName})`)
-          .join("\n");
-        return [
-          {
-            sender: "bot",
-            text: `ผมพบกระทู้เกี่ยวกับการเรียนในเรื่อง "${queryKeyword}" บนเว็บบอร์ด CS Helpdesk ด้วยครับ:\n\n${listText}\n\nคลิกลิงก์ด้านล่างเพื่อเข้าไปศึกษาเพิ่มเติมได้เลยครับ:`,
-            searchResults: threads.map(({ id, title }) => ({ id, title })),
-            forumQuery: queryKeyword,
-          },
-        ];
-      }
+/** กระทู้บนเว็บบอร์ดที่ตรงกับคำสำคัญในข้อความ หรือ null เมื่อข้อความไม่ได้พูดถึงเรื่องที่มีกระทู้ */
+async function forumReplies(textToSend: string): Promise<BotReply[] | null> {
+  const cleanText = textToSend.trim().toLowerCase();
+  const has = (...words: string[]) => words.some((w) => cleanText.includes(w));
+
+  if (!has(...THREAD_KEYWORDS, "กระทู้")) return null;
+
+  const queryKeyword = THREAD_KEYWORDS.find((k) => cleanText.includes(k)) ?? "";
+  try {
+    const threads = unwrap(
+      await api.get<SuccessEnvelope<QuestionSummary[]>>("/api/v1/questions", {
+        params: { ...(queryKeyword ? { q: queryKeyword } : {}), limit: 5 },
+      }),
+    );
+
+    if (threads.length > 0) {
+      const listText = threads
+        .map((t, idx) => `${idx + 1}. **${t.title}** (โดย ${authorLabel(t.author)})`)
+        .join("\n");
       return [
         {
           sender: "bot",
-          text: `ผมลองค้นหาหัวข้อการเรียนเรื่อง "${queryKeyword}" บนเว็บบอร์ดช่วยเหลือแล้ว แต่ยังไม่พบกระทู้ที่ตรงกันเลยครับ`,
-          suggestAsk: true,
-        },
-      ];
-    } catch (err) {
-      console.error(err);
-      return [
-        {
-          sender: "bot",
-          text: "ขออภัยด้วยครับ ระบบดึงข้อมูลเว็บบอร์ดขัดข้องชั่วคราว ลองปรึกษาเรื่องทะเบียนเรียนดูนะครับ",
+          text: `ผมพบกระทู้เกี่ยวกับการเรียนในเรื่อง "${queryKeyword}" บนเว็บบอร์ด CS Helpdesk ด้วยครับ:\n\n${listText}\n\nคลิกลิงก์ด้านล่างเพื่อเข้าไปศึกษาเพิ่มเติมได้เลยครับ:`,
+          searchResults: threads.map(({ id, title }) => ({ id, title })),
+          forumQuery: queryKeyword,
         },
       ];
     }
+    return [
+      {
+        sender: "bot",
+        text: `ผมลองค้นหาหัวข้อการเรียนเรื่อง "${queryKeyword}" บนเว็บบอร์ดช่วยเหลือแล้ว แต่ยังไม่พบกระทู้ที่ตรงกันเลยครับ`,
+        suggestAsk: true,
+      },
+    ];
+  } catch (err) {
+    console.error(err);
+    return [
+      {
+        sender: "bot",
+        text: "ขออภัยด้วยครับ ระบบดึงข้อมูลเว็บบอร์ดขัดข้องชั่วคราว ลองปรึกษาเรื่องทะเบียนเรียนดูนะครับ",
+      },
+    ];
   }
-
-  // 9. ไม่ตรงหัวข้อไหน: ลองถาม AI (app/assistant/chat) ถ้าไม่ได้ตั้ง OPENAI_API_KEY หรือเรียกไม่สำเร็จ ใช้ข้อความเดิม
-  const aiAnswer = await askAssistant(textToSend);
-  if (aiAnswer) {
-    return [{ sender: "bot", text: aiAnswer }];
-  }
-
-  return [
-    {
-      sender: "bot",
-      text: 'ขออภัยครับ บอทวิชาการยังไม่เข้าใจคำถามนี้\nคุณสามารถสอบถามเกี่ยวกับ:\n• "[หลักสูตร วิทยาการคอมพิวเตอร์ (รหัส 70)]" (โครงสร้าง 120–124 หน่วยกิต & 4 แทร็กอาชีพ)\n• "[ค่าเทอม วิทยาการคอมพิวเตอร์]" (คณะวิทยาศาสตร์ 20,000 บาท)\n• "[ทุนปันน้ำใจพี่ให้น้อง]" (ทุนต่อเนื่อง/ไม่ต่อเนื่อง)\n• "[ปฏิทินการศึกษา MJU]" (ดาวน์โหลดปฏิทิน มหาวิทยาลัยแม่โจ้)\n• "ผ่อนผันทหาร" (ประกาศการผ่อนผันเกณฑ์ทหาร ปี 2569 พร้อมรูปภาพ)\n• "ประกันอุบัติเหตุ" (ความคุ้มครอง & รายชื่อโรงพยาบาลคู่สัญญา พร้อมรูปภาพ)\nหรือเลือกคลิกจากปุ่มตัวเลือกด้านล่างได้เลยครับ!',
-    },
-  ];
 }

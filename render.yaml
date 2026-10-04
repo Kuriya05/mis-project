@@ -1,0 +1,45 @@
+# Render Blueprint — backend (NestJS) ของ csmju-study-qa · คู่มือเต็มอยู่ที่ DEPLOY.md
+# หน้าเว็บ (Next.js) ขึ้น Vercel แยกต่างหาก และเป็นประตูเดียวของระบบ: ส่ง /api/* และ /auth/* ต่อมาที่ service นี้
+# ค่าที่ sync: false ต้องกรอกเองในหน้า Render (ห้าม commit ค่าจริง)
+services:
+  - type: web
+    name: csmju-study-qa-api
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter backend build
+    # migration ก่อนเริ่มทุกครั้ง (prisma migrate deploy ไม่ทำซ้ำอันที่รันแล้ว)
+    startCommand: pnpm --filter backend db:migrate && pnpm --filter backend start:prod
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: SUBSYSTEM_ID
+        value: csmju-study-qa
+      - key: SUBSYSTEM_NAME
+        value: ถาม-ตอบวิชาการ CS แม่โจ้
+      - key: CORE_HUB_URL
+        value: https://csmju2030.jowave.com
+      - key: CORE_HUB_JWKS_URL
+        value: https://csmju2030.jowave.com/api/v1/.well-known/jwks.json
+      - key: CORE_HUB_WEB_URL
+        value: https://csmju2030.jowave.com
+      - key: CORE_HUB_ISSUER
+        value: core-hub
+      - key: CORE_HUB_AUDIENCE
+        value: csmju2030
+      # หน้าเว็บอยู่ที่ Vercel — backend ไม่ต้องส่งหน้าเว็บต่อ
+      - key: FRONTEND_URL
+        value: ""
+      # Render มี proxy 1 ชั้นหน้า service
+      - key: TRUST_PROXY
+        value: "1"
+      - key: GEMINI_MODELS
+        value: gemini-3.5-flash,gemini-flash-lite-latest
+      # connection string ของ Neon (postgresql://...?sslmode=require)
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

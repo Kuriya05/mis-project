@@ -254,3 +254,11 @@ export function ZoomInIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function BookmarkIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden {...props}>
+      <path d="M6.5 4.5h11v15.5L12 16.2 6.5 20Z" />
+    </svg>
+  );
+}

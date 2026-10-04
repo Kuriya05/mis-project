@@ -6,6 +6,8 @@ const CORE_ROLE_TO_CLAIM: Readonly<Record<CoreRole, string>> = {
   [CoreRole.ALUMNI]: 'alumni',
   [CoreRole.STAFF]: 'staff',
   [CoreRole.ADMIN]: 'admin',
+  [CoreRole.LECTURER]: 'lecturer',
+  [CoreRole.GUEST]: 'guest',
 };
 
 const CLAIM_TO_CORE_ROLE: Readonly<Record<string, CoreRole>> = {
@@ -13,6 +15,8 @@ const CLAIM_TO_CORE_ROLE: Readonly<Record<string, CoreRole>> = {
   alumni: CoreRole.ALUMNI,
   staff: CoreRole.STAFF,
   admin: CoreRole.ADMIN,
+  lecturer: CoreRole.LECTURER,
+  guest: CoreRole.GUEST,
 };
 
 export function coreRoleFromClaim(claim: string): CoreRole | null {
@@ -23,18 +27,24 @@ export function coreRoleToClaim(role: CoreRole): string {
   return CORE_ROLE_TO_CLAIM[role];
 }
 
+/** An author is shown by person_code and role only - never a name (reference-data.md 8). */
 export interface AuthorView {
   id: string;
-  displayName: string;
+  personCode: string | null;
   coreRole: string;
+  /** The subsystem's AI assistant, not a person. */
+  isAssistant: boolean;
 }
 
-export const AUTHOR_SELECT = { id: true, displayName: true, coreRole: true } as const;
+export const AUTHOR_SELECT = { id: true, personCode: true, coreRole: true, isAssistant: true } as const;
 
-export function toAuthorView(profile: Pick<Profile, 'id' | 'displayName' | 'coreRole'>): AuthorView {
+export function toAuthorView(
+  profile: Pick<Profile, 'id' | 'personCode' | 'coreRole' | 'isAssistant'>,
+): AuthorView {
   return {
     id: profile.id,
-    displayName: profile.displayName,
+    personCode: profile.personCode,
+    isAssistant: profile.isAssistant,
     coreRole: coreRoleToClaim(profile.coreRole),
   };
 }

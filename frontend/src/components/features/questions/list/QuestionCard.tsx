@@ -5,6 +5,7 @@ import { ArrowUpIcon, ChatBubbleIcon } from "@/components/shared/icons";
 import { StatusBadge } from "@/csmju";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 import { tagClass } from "@/lib/tags";
+import { authorLabel } from "@/lib/permissions";
 import type { QuestionSummary } from "@/lib/types";
 
 // การ์ดกระทู้ 1 ใบ: ทั้งการ์ดกดเปิดกระทู้ได้ (ลิงก์ที่หัวข้อขยายเต็มการ์ด) ส่วนปุ่มโหวตอยู่เหนือลิงก์
@@ -60,8 +61,8 @@ export default function QuestionCard({
 
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex items-center gap-2 text-caption text-secondary">
-          <Avatar name={q.author.displayName} size="xs" />
-          <span className="truncate text-label-sm text-on-surface">{q.author.displayName}</span>
+          <Avatar name={authorLabel(q.author)} size="xs" />
+          <span className="truncate text-label-sm text-on-surface">{authorLabel(q.author)}</span>
           <span aria-hidden="true">·</span>
           <time dateTime={q.createdAt} title={formatDateTime(q.createdAt)} className="shrink-0">
             {formatRelative(q.createdAt)}

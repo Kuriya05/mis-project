@@ -10,6 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { CoreHubIdentity } from '../auth/core-hub-identity';
+import { CoreHubAccessToken } from '../auth/decorators/core-hub-access-token.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { Permission } from '../auth/permissions';
@@ -39,8 +40,12 @@ export class QuestionsController {
 
   @Post()
   @RequirePermissions(Permission.QUESTION_CREATE)
-  create(@CurrentUser() user: CoreHubIdentity, @Body() dto: CreateQuestionDto) {
-    return this.questions.create(user, dto);
+  create(
+    @CurrentUser() user: CoreHubIdentity,
+    @CoreHubAccessToken() token: string,
+    @Body() dto: CreateQuestionDto,
+  ) {
+    return this.questions.create(user, token, dto);
   }
 
   @Patch(':id')
@@ -69,5 +74,17 @@ export class QuestionsController {
   @RequirePermissions(Permission.QUESTION_VOTE)
   unvote(@CurrentUser() user: CoreHubIdentity, @Param('id', ParseUUIDPipe) id: string) {
     return this.questions.unvote(user, id);
+  }
+
+  @Post(':id/bookmark')
+  @RequirePermissions(Permission.QUESTION_BOOKMARK)
+  bookmark(@CurrentUser() user: CoreHubIdentity, @Param('id', ParseUUIDPipe) id: string) {
+    return this.questions.bookmark(user, id);
+  }
+
+  @Delete(':id/bookmark')
+  @RequirePermissions(Permission.QUESTION_BOOKMARK)
+  unbookmark(@CurrentUser() user: CoreHubIdentity, @Param('id', ParseUUIDPipe) id: string) {
+    return this.questions.unbookmark(user, id);
   }
 }

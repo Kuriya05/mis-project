@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChatBubbleIcon, ExternalLinkIcon } from "@/components/shared/icons";
+import { ChatBubbleIcon, ExternalLinkIcon, SparklesIcon } from "@/components/shared/icons";
 import { DescriptionIcon } from "@/csmju";
 import type { BotMessage, ChatMessage, PreviewImage } from "@/lib/academic-bot";
 import { BotAvatar, MascotAcademic } from "./ChatArt";
@@ -71,6 +71,12 @@ function BotMessageView({
           }`}
         >
           <RichText text={msg.text} />
+          {msg.fromAssistant && (
+            <p className="mt-2 flex items-center gap-1 text-caption text-secondary">
+              <SparklesIcon className="h-3.5 w-3.5 shrink-0" />
+              ตอบโดยผู้ช่วย AI (Gemini) · ข้อมูลทางการโปรดยืนยันกับสาขาวิชา
+            </p>
+          )}
 
           {msg.image && <ImageAttachment image={msg.image} onPreview={onPreview} compact={compact} />}
           {msg.images?.map((image) => (

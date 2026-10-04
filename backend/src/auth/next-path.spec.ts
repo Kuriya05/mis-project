@@ -5,10 +5,11 @@ const backslash = String.fromCharCode(92);
 
 describe('safeNextPath', () => {
   it.each([
-    '/api/v1/me',
-    '/courses',
-    '/courses?term=1&year=2569',
-    '/courses#section-2',
+    '/',
+    '/bookings',
+    '/bookings?status=PENDING&page=2',
+    '/rooms/LAB-1#schedule',
+    '/rooms/LAB-1?error=%E0%B8%81',
     '/authors',
     '/api/v1/auth-info',
   ])('keeps the in-site path %s', (value) => {
@@ -21,13 +22,16 @@ describe('safeNextPath', () => {
     ['backslash anywhere', `/a${backslash}b`],
     ['absolute URL', 'https://evil.example.com'],
     ['javascript URL', 'javascript:alert(1)'],
-    ['relative path', 'courses'],
-    ['leading space', ' /courses'],
+    ['relative path', 'bookings'],
+    ['leading space', ' /bookings'],
     ['the login route', '/auth/login'],
     ['the callback', '/auth/callback'],
     ['the logout route', '/auth/logout'],
     ['the auth prefix itself', '/auth'],
     ['a dot segment into /auth', '/x/../auth/login'],
+    ['/auth in capitals', '/AUTH/login'],
+    ['/auth percent-encoded', '/%61uth/login'],
+    ['a malformed percent-encoding', '/bookings%E0%A4%A'],
     ['a NUL', '/a\u0000b'],
     ['a tab', '/a\tb'],
     ['a DEL', '/a\u007fb'],
@@ -37,7 +41,7 @@ describe('safeNextPath', () => {
     expect(next(value)).toBeNull();
   });
 
-  it.each([undefined, null, 42, ['/courses'], { next: '/courses' }])(
+  it.each([undefined, null, 42, ['/bookings'], { next: '/bookings' }])(
     'refuses the non-string %p',
     (value) => {
       expect(next(value)).toBeNull();

@@ -19,13 +19,10 @@ import { readCookie, ssoCookieNames } from '../sso-session';
  * custom headers is ever trusted as identity (spec §8, §41.7-41.8).
  *
  * A browser that arrived through central SSO carries the same Core Hub token in
- * an HttpOnly cookie instead of an Authorization header; the cookie is accepted
- * as a fallback and goes through exactly the same verification. When both are
- * present the header wins (auth-contract 6).
- *
- * An expired or missing token is always answered with 401 JSON, never with a
- * redirect: a `fetch` cannot follow a redirect to Core Hub across origins, so
- * sending the browser to /auth/login is the frontend's job.
+ * the HttpOnly `<name>_access_token` cookie instead of an Authorization
+ * header; the cookie is accepted as a fallback and goes through exactly the
+ * same verification (auth-contract 6). No other cookie is ever read - on
+ * localhost the browser also sends Core Hub's own `csmju_*` cookies here.
  */
 @Injectable()
 export class CoreHubJwtGuard implements CanActivate {
@@ -37,7 +34,9 @@ export class CoreHubJwtGuard implements CanActivate {
     private readonly authEvents: AuthEventsLogger,
     config: ConfigService,
   ) {
-    this.sessionCookie = ssoCookieNames(config.get<string>('subsystemId', 'student-service')).session;
+    this.sessionCookie = ssoCookieNames(
+      config.get<string>('subsystemId', 'csmju-demo-subsystem'),
+    ).session;
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -91,10 +90,12 @@ export class CoreHubJwtGuard implements CanActivate {
       coreRole: payload.role as string,
       sessionId: payload.sid,
       subsystemRole,
-      expiresAt: typeof payload.exp === 'number' ? new Date(payload.exp * 1000).toISOString() : null,
+      exp: payload.exp,
     };
 
     request.user = identity;
+    // token ที่ตรวจผ่านแล้ว สำหรับส่งต่อไป Core Hub (reference data) — ห้าม log
+    request.coreHubAccessToken = token;
 
     this.authEvents.jwtVerified({
       sub: identity.id,

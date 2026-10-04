@@ -20,7 +20,8 @@ export default function AssistantChat() {
     // สูงเต็มจอใต้แถบบนของ AppShell (4rem) ลบ padding ของพื้นที่เนื้อหา (p-4 / md:p-12)
     <section
       aria-labelledby="assistant-title"
-      className={`${card} flex h-[calc(100dvh-6rem)] min-h-96 flex-col md:h-[calc(100dvh-10rem)]`}
+      // w-0 min-w-full: แถวที่เลื่อนแนวนอน (การ์ด ปุ่มด่วน) ไม่ดันความกว้างของทั้งหน้า (หน้าจอแคบ)
+      className={`${card} flex h-[calc(100dvh-6rem)] w-0 min-w-full min-h-96 flex-col md:h-[calc(100dvh-10rem)]`}
     >
       {/* หัวแชท */}
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/40 px-4 py-4 sm:px-6">

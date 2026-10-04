@@ -1,5 +1,6 @@
-import { MailIcon, SchoolIcon } from "@/csmju";
-import { btnTonal, card } from "@/components/shared/classes";
+import Link from "next/link";
+import { DescriptionIcon, EditIcon, MailIcon, SchoolIcon } from "@/csmju";
+import { btnPrimary, btnTonal, card } from "@/components/shared/classes";
 import { ExternalLinkIcon, PhoneIcon } from "@/components/shared/icons";
 import {
   EXPERTISE_AREAS,
@@ -7,6 +8,8 @@ import {
   type ExpertiseArea,
   type FacultyMember,
 } from "@/data/faculty";
+import { AREA_TAGS } from "@/lib/faculty-match";
+import type { QuestionSummary } from "@/lib/types";
 import FacultyPhoto from "./FacultyPhoto";
 import { displayPhone, telHref } from "./faculty-utils";
 
@@ -20,11 +23,20 @@ export default function FacultyCard({
   person,
   activeArea,
   onSelectArea,
+  related,
+  canAsk,
 }: {
   person: FacultyMember;
   activeArea: ExpertiseArea | null;
   onSelectArea: (area: ExpertiseArea | null) => void;
+  /** กระทู้ที่แท็กตรงกับด้านความถนัดของอาจารย์ (null = ยังโหลดไม่เสร็จ/โหลดไม่ได้) */
+  related: QuestionSummary[] | null;
+  canAsk: boolean;
 }) {
+  const askHref = `/questions/new?${new URLSearchParams({
+    tags: person.areas.map((a) => AREA_TAGS[a]).join(","),
+    lecturer: person.id,
+  }).toString()}`;
   const tel = telHref(person.phone);
   const phone = displayPhone(person.phone);
 
@@ -81,8 +93,33 @@ export default function FacultyCard({
         ))}
       </ul>
 
+      {/* กระทู้บนกระดานที่ตรงกับความถนัดของอาจารย์ */}
+      {related && related.length > 0 && (
+        <div className="mt-4 rounded-lg bg-surface-container-low px-3 py-2">
+          <p className="text-label-sm text-on-surface">กระทู้ที่เกี่ยวข้อง ({related.length})</p>
+          <ul className="mt-1 space-y-0.5">
+            {related.slice(0, 2).map((q) => (
+              <li key={q.id}>
+                <Link
+                  href={`/questions/${q.id}`}
+                  className="flex items-start gap-1.5 text-label-sm font-normal text-primary-container hover:underline"
+                >
+                  <DescriptionIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span className="line-clamp-1">{q.title}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* ช่องทางการติดต่อ */}
       <div className="mt-auto pt-4">
+        {canAsk && (
+          <Link href={askHref} className={`${btnPrimary} mb-4 w-full`}>
+            <EditIcon className="h-4 w-4" /> ถามเรื่องที่อาจารย์ถนัด
+          </Link>
+        )}
         <div className="space-y-2 border-t border-outline-variant/40 pt-4">
           <a href={`mailto:${person.email}`} className={contactLink}>
             <span className={`${contactIconBox} ${contactIconBoxHover}`}>

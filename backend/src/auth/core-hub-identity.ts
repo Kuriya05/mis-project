@@ -21,12 +21,8 @@ export interface CoreHubIdentity {
   sessionId?: string;
   /** Result of the subsystem's own role mapping. */
   subsystemRole: SubsystemRole;
-  /**
-   * When the token - and so this browser's session - stops being accepted, as
-   * ISO 8601 from `exp`. A frontend reads it from /api/v1/me to renew through
-   * /auth/login before the user hits a 401.
-   */
-  expiresAt: string | null;
+  /** When the verified token - and with it this session - expires (`exp`, epoch seconds). */
+  exp?: number;
 }
 
 export interface CoreHubTokenPayload {
@@ -38,4 +34,6 @@ export interface CoreHubTokenPayload {
   aud: string | string[];
   iat?: number;
   exp?: number;
+  /** Authorized party: the registered subsystem the token was issued for (when Core Hub sets it). */
+  azp?: string;
 }

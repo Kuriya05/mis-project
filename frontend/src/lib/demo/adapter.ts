@@ -6,8 +6,7 @@ import {
   type InternalAxiosRequestConfig,
 } from "axios";
 import type { Answer, Author, Comment, ErrorCode, QuestionDetail, QuestionSummary, Tag } from "../types";
-import { DEMO_NAME_COOKIE } from "./flag";
-import { DEMO_DEFAULT_NAME, DEMO_USER_ID, demoProfile } from "./profile";
+import { DEMO_USER_ID, demoProfile } from "./profile";
 import { PROFILES, QUESTIONS, type ProfileKey } from "./sample-data";
 
 // แทน backend ด้วยข้อมูลในหน่วยความจำของเบราว์เซอร์ (รีเฟรชหน้าแล้วกลับเป็นข้อมูลตัวอย่างเดิม)
@@ -20,6 +19,8 @@ interface StoredComment {
   authorId: string;
   body: string;
   isVerified: boolean;
+  recommendedFacultyIds: string[];
+  relatedQuestionIds: string[];
   voters: Set<string>;
   editedAt: string | null;
   createdAt: string;
@@ -38,10 +39,30 @@ interface StoredQuestion {
   updatedAt: string;
 }
 
-const authors = new Map<string, Author>(
-  Object.values(PROFILES).map((p) => [p.id, { id: p.id, coreRole: p.coreRole, displayName: p.displayName }]),
-);
+/**
+ * UUID v4 — crypto.randomUUID มีเฉพาะ secure context (https หรือ localhost) จึงใช้ไม่ได้ตอนเปิด
+ * dev server ผ่าน IP (เช่น http://26.155.53.96:3235) · getRandomValues ใช้ได้ทุก context
+ */
+export function uuidV4(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+const DEMO_ASSISTANT_ID = "demo-assistant";
+
+const authors = new Map<string, Author>([
+  ...Object.values(PROFILES).map(
+    (p): [string, Author] => [p.id, { id: p.id, coreRole: p.coreRole, personCode: p.personCode, isAssistant: false }],
+  ),
+  [DEMO_ASSISTANT_ID, { id: DEMO_ASSISTANT_ID, coreRole: "staff", personCode: null, isAssistant: true }],
+]);
 const questions = new Map<string, StoredQuestion>();
+/** กระทู้ที่ผู้ใช้สมมติบันทึกไว้ · เวลาที่เปิดดูกิจกรรมล่าสุด */
+const bookmarks = new Set<string>();
+let activitySeenAt: string | null = null;
 const comments = new Map<string, StoredComment>();
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60 * 1000).toISOString();
@@ -69,6 +90,8 @@ for (const q of QUESTIONS) {
       authorId: PROFILES[c.author].id,
       body: c.body,
       isVerified: c.isVerified ?? false,
+      recommendedFacultyIds: [],
+      relatedQuestionIds: [],
       voters: idOf(c.voters),
       editedAt: null,
       createdAt: at,
@@ -76,13 +99,6 @@ for (const q of QUESTIONS) {
     });
   }
 }
-
-function readDemoName(): string {
-  if (typeof document === "undefined") return DEMO_DEFAULT_NAME;
-  const match = document.cookie.match(new RegExp(`(?:^|; )${DEMO_NAME_COOKIE}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : DEMO_DEFAULT_NAME;
-}
-authors.set(DEMO_USER_ID, { ...authors.get(DEMO_USER_ID)!, displayName: readDemoName() });
 
 // ---- views ------------------------------------------------------------------
 
@@ -100,6 +116,11 @@ function commentView(c: StoredComment): Comment {
     parentId: c.parentId,
     body: c.body,
     isVerified: c.isVerified,
+    recommendedFacultyIds: c.recommendedFacultyIds,
+    relatedQuestions: c.relatedQuestionIds.flatMap((id) => {
+      const related = questions.get(id);
+      return related ? [{ id, title: related.title }] : [];
+    }),
     author: authors.get(c.authorId)!,
     voteCount: c.voters.size,
     hasVoted: c.voters.has(DEMO_USER_ID),
@@ -118,6 +139,7 @@ function summaryView(q: StoredQuestion): QuestionSummary {
     author: authors.get(q.authorId)!,
     voteCount: q.voters.size,
     hasVoted: q.voters.has(DEMO_USER_ID),
+    isBookmarked: bookmarks.has(q.id),
     commentCount: commentsOf(q.id).length,
     editedAt: q.editedAt,
     createdAt: q.createdAt,
@@ -133,6 +155,139 @@ function detailView(q: StoredQuestion): QuestionDetail {
     .filter((c) => c.parentId === null)
     .map((c) => ({ ...commentView(c), replies: all.filter((r) => r.parentId === c.id).map(commentView) }));
   return { ...summaryView(q), body: q.body, comments: answers };
+}
+
+// ---- ผู้ช่วย AI ตอบกระทู้ใหม่ทุกกระทู้ (ระบบจริงทำที่ backend/src/assistant/assistant-answer.service.ts) ----
+
+/** ถาม /assistant/answer (Gemini) แล้วเพิ่มคำตอบของผู้ช่วย AI เป็นคำตอบแรกของกระทู้ */
+async function answerWithAssistant(q: StoredQuestion): Promise<void> {
+  const earlier = [...questions.values()]
+    .filter(
+      (other) =>
+        other.id !== q.id &&
+        commentsOf(other.id).some((c) => c.parentId === null && c.authorId !== DEMO_ASSISTANT_ID),
+    )
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 40)
+    .map((other) => ({
+      id: other.id,
+      title: other.title,
+      body: other.body,
+      tags: other.tags,
+      resolved: isResolved(other.id),
+      answers: commentsOf(other.id)
+        .filter((c) => c.parentId === null && c.authorId !== DEMO_ASSISTANT_ID)
+        .sort((a, b) => Number(b.isVerified) - Number(a.isVerified) || b.voters.size - a.voters.size)
+        .slice(0, 2)
+        .map((c) => ({ verified: c.isVerified, body: c.body })),
+    }));
+
+  try {
+    const res = await fetch("/assistant/answer", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question: { title: q.title, body: q.body, tags: q.tags }, earlier }),
+    });
+    if (!res.ok) return;
+    const { data } = (await res.json()) as {
+      data: { repeatOfIds: string[]; answer: string; recommendedFacultyIds: string[] };
+    };
+    if (!data.answer || !questions.has(q.id)) return;
+    const at = new Date().toISOString();
+    const c: StoredComment = {
+      id: uuidV4(),
+      questionId: q.id,
+      parentId: null,
+      authorId: DEMO_ASSISTANT_ID,
+      body: data.answer,
+      isVerified: false,
+      recommendedFacultyIds: data.recommendedFacultyIds,
+      relatedQuestionIds: data.repeatOfIds,
+      voters: new Set(),
+      editedAt: null,
+      createdAt: at,
+      updatedAt: at,
+    };
+    comments.set(c.id, c);
+  } catch (err) {
+    console.warn("[demo] AI answer for a new question failed", err);
+  }
+}
+
+// ---- กิจกรรมของฉัน และสถิติ (กติกาเดียวกับ backend/src/profiles/activity.service.ts · stats.service.ts) ----
+
+function activityView() {
+  const mine = new Set([...questions.values()].filter((q) => q.authorId === DEMO_USER_ID).map((q) => q.id));
+  const onMine = [...comments.values()]
+    .filter((c) => mine.has(c.questionId) && c.authorId !== DEMO_USER_ID)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const isNew = (c: StoredComment) => activitySeenAt === null || c.createdAt > activitySeenAt;
+  return {
+    unreadCount: onMine.filter(isNew).length,
+    seenAt: activitySeenAt,
+    items: onMine.slice(0, 20).map((c) => ({
+      id: c.id,
+      kind: c.parentId === null ? "answer" : "reply",
+      questionId: c.questionId,
+      questionTitle: questions.get(c.questionId)?.title ?? "",
+      author: authors.get(c.authorId)!,
+      excerpt: c.body.length > 140 ? `${c.body.slice(0, 140)}…` : c.body,
+      isVerified: c.isVerified,
+      isNew: isNew(c),
+      createdAt: c.createdAt,
+    })),
+  };
+}
+
+function statsView() {
+  const DAY = 24 * 60 * 60 * 1000;
+  // วันจันทร์ต้นสัปดาห์ตามเวลาไทย (UTC+7) — กติกาเดียวกับ backend weekStartOf
+  const weekStart = (iso: string) => {
+    const d = new Date(new Date(iso).getTime() + 7 * 60 * 60 * 1000);
+    const day = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    return day - ((new Date(day).getUTCDay() + 6) % 7) * DAY;
+  };
+  const first = weekStart(new Date().toISOString()) - 7 * 7 * DAY;
+  const weekly = Array.from({ length: 8 }, (_, i) => ({
+    weekStart: new Date(first + i * 7 * DAY).toISOString().slice(0, 10),
+    questions: 0,
+    answers: 0,
+  }));
+  const answers = [...comments.values()].filter((c) => c.parentId === null && c.authorId !== DEMO_ASSISTANT_ID);
+  for (const q of questions.values()) {
+    const i = Math.floor((weekStart(q.createdAt) - first) / (7 * DAY));
+    if (i >= 0) weekly[i].questions += 1;
+  }
+  for (const a of answers) {
+    const i = Math.floor((weekStart(a.createdAt) - first) / (7 * DAY));
+    if (i >= 0) weekly[i].answers += 1;
+  }
+  const tagCounts = new Map<string, number>();
+  for (const q of questions.values()) for (const t of q.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+  const helpers = new Map<string, { answers: number; verifiedAnswers: number }>();
+  for (const a of answers) {
+    const h = helpers.get(a.authorId) ?? { answers: 0, verifiedAnswers: 0 };
+    h.answers += 1;
+    if (a.isVerified) h.verifiedAnswers += 1;
+    helpers.set(a.authorId, h);
+  }
+  return {
+    totals: {
+      questions: questions.size,
+      resolved: [...questions.keys()].filter(isResolved).length,
+      answers: answers.length,
+      assistantAnswers: [...comments.values()].filter((c) => c.authorId === DEMO_ASSISTANT_ID).length,
+    },
+    topTags: [...tagCounts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      .slice(0, 8),
+    weekly,
+    topHelpers: [...helpers.entries()]
+      .sort(([, a], [, b]) => b.verifiedAnswers - a.verifiedAnswers || b.answers - a.answers)
+      .slice(0, 5)
+      .map(([id, h]) => ({ author: authors.get(id)!, ...h })),
+  };
 }
 
 // ---- tag suggestion (สำเนากติกาจาก backend/src/tags/tag-suggester.ts) -------
@@ -209,7 +364,21 @@ function listQuestions(params: Body): Result {
   if (tag) items = items.filter((x) => x.tags.includes(tag));
   if (params.status) items = items.filter((x) => summaryView(x).status === params.status);
   if (truthy(params.mine)) items = items.filter((x) => x.authorId === DEMO_USER_ID);
-  if (truthy(params.unanswered)) items = items.filter((x) => commentsOf(x.id).length === 0);
+  if (truthy(params.bookmarked)) items = items.filter((x) => bookmarks.has(x.id));
+  // ผู้ช่วย AI ตอบทุกกระทู้ใหม่ — "รอคนตอบ" จึงนับเฉพาะคำตอบของคน
+  if (truthy(params.unanswered)) {
+    items = items.filter(
+      (x) => !isResolved(x.id) && !commentsOf(x.id).some((c) => c.authorId !== DEMO_ASSISTANT_ID),
+    );
+  }
+  if (params.sort === "popular") {
+    items.sort(
+      (a, b) =>
+        b.voters.size - a.voters.size ||
+        commentsOf(b.id).length - commentsOf(a.id).length ||
+        byCreatedAt(b, a),
+    );
+  }
 
   const limit = Number(params.limit) || 20;
   const page = Number(params.page) || 1;
@@ -239,14 +408,15 @@ function route(method: string, path: string, params: Body, body: Body): Result {
   const now = new Date().toISOString();
   let m: RegExpMatchArray | null;
 
-  if (path === "/profiles/me") {
-    if (method === "patch") {
-      const displayName = requireText(body, "displayName");
-      authors.set(DEMO_USER_ID, { ...authors.get(DEMO_USER_ID)!, displayName });
-      document.cookie = `${DEMO_NAME_COOKIE}=${encodeURIComponent(displayName)}; path=/; SameSite=Lax`;
-    }
-    return { data: demoProfile(authors.get(DEMO_USER_ID)!.displayName) };
+  if (path === "/profiles/me" && method === "get") {
+    return { data: demoProfile() };
   }
+  if (path === "/profiles/me/activity" && method === "get") return { data: activityView() };
+  if (path === "/profiles/me/activity/seen" && method === "post") {
+    activitySeenAt = now;
+    return { data: { seenAt: now } };
+  }
+  if (path === "/stats" && method === "get") return { data: statsView() };
 
   if (path === "/tags" && method === "get") return listTags(params);
   if (path === "/tag-suggestions" && method === "post") {
@@ -260,7 +430,7 @@ function route(method: string, path: string, params: Body, body: Body): Result {
       const text = requireText(body, "body");
       const tags = Array.isArray(body.tags) && body.tags.length > 0 ? body.tags.map(String) : suggestTags(title, text);
       const q: StoredQuestion = {
-        id: crypto.randomUUID(),
+        id: uuidV4(),
         authorId: DEMO_USER_ID,
         title,
         body: text,
@@ -271,6 +441,7 @@ function route(method: string, path: string, params: Body, body: Body): Result {
         updatedAt: now,
       };
       questions.set(q.id, q);
+      void answerWithAssistant(q);
       return { status: 201, data: detailView(q) };
     }
   }
@@ -299,6 +470,16 @@ function route(method: string, path: string, params: Body, body: Body): Result {
     return { data: { id: q.id, ...vote(q.voters, method === "post") } };
   }
 
+  if ((m = path.match(/^\/questions\/([^/]+)\/bookmark$/))) {
+    const q = mustQuestion(m[1]);
+    if (method === "post") {
+      bookmarks.add(q.id);
+      return { status: 201, data: { id: q.id, isBookmarked: true } };
+    }
+    bookmarks.delete(q.id);
+    return { data: { id: q.id, isBookmarked: false, deleted: true } };
+  }
+
   if ((m = path.match(/^\/questions\/([^/]+)\/comments$/)) && method === "post") {
     const q = mustQuestion(m[1]);
     const parentId = typeof body.parentId === "string" ? body.parentId : null;
@@ -306,12 +487,14 @@ function route(method: string, path: string, params: Body, body: Body): Result {
       throw new DemoError(400, "VALIDATION_ERROR", "parentId belongs to another question", "parentId");
     }
     const c: StoredComment = {
-      id: crypto.randomUUID(),
+      id: uuidV4(),
       questionId: q.id,
       parentId,
       authorId: DEMO_USER_ID,
       body: requireText(body, "body"),
       isVerified: false,
+      recommendedFacultyIds: [],
+      relatedQuestionIds: [],
       voters: new Set(),
       editedAt: null,
       createdAt: now,

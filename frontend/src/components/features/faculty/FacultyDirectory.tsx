@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GroupIcon, SchoolIcon, SearchIcon } from "@/csmju";
 import { btnSecondary, card, input } from "@/components/shared/classes";
 import { AwardIcon, LayersIcon } from "@/components/shared/icons";
@@ -12,7 +12,11 @@ import {
   FACULTY_UPDATED_AT,
   type ExpertiseArea,
 } from "@/data/faculty";
+import { useSession } from "@/components/shared/SessionProvider";
+import { api, unwrap } from "@/lib/api";
+import { questionsForLecturer } from "@/lib/faculty-match";
 import { formatNumber } from "@/lib/format";
+import type { QuestionSummary, SuccessEnvelope } from "@/lib/types";
 import ExpertiseChart, { type AreaCount } from "./ExpertiseChart";
 import FacultyCard from "./FacultyCard";
 import ProgramContactCard from "./ProgramContactCard";
@@ -36,6 +40,23 @@ const STATS = {
 export default function FacultyDirectory() {
   const [query, setQuery] = useState("");
   const [activeArea, setActiveArea] = useState<ExpertiseArea | null>(null);
+  const { can } = useSession();
+  const canAsk = can("question:create");
+
+  // กระทู้ล่าสุด 100 กระทู้ ไว้จับคู่กับความถนัดของอาจารย์แต่ละท่าน · โหลดไม่ได้ก็แค่ไม่แสดงส่วนนี้
+  const [questions, setQuestions] = useState<QuestionSummary[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<SuccessEnvelope<QuestionSummary[]>>("/api/v1/questions", { params: { limit: 100 } })
+      .then((res) => {
+        if (!cancelled) setQuestions(unwrap(res));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -112,7 +133,14 @@ export default function FacultyDirectory() {
       {filtered.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 2xl:grid-cols-3">
           {filtered.map((person) => (
-            <FacultyCard key={person.id} person={person} activeArea={activeArea} onSelectArea={setActiveArea} />
+            <FacultyCard
+              key={person.id}
+              person={person}
+              activeArea={activeArea}
+              onSelectArea={setActiveArea}
+              related={questions && questionsForLecturer(person, questions)}
+              canAsk={canAsk}
+            />
           ))}
         </div>
       ) : (

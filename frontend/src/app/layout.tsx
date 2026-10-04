@@ -6,7 +6,7 @@ import SessionProvider from "@/components/shared/SessionProvider";
 import SignedOutScreen from "@/components/shared/SignedOutScreen";
 import { CsmjuAppShell, type NavItem } from "@/csmju";
 import { DEMO_MODE } from "@/lib/demo/flag";
-import { can, initialsOf, roleLabel } from "@/lib/permissions";
+import { authorLabel, can, initialsOf, roleLabel } from "@/lib/permissions";
 import { loadSession } from "@/lib/session";
 import "./globals.css";
 
@@ -23,12 +23,13 @@ const notoSansThai = Noto_Sans_Thai({
 });
 
 // ต้องตรงกับ display_name ใน subsystem.yaml
-const DISPLAY_NAME = "CSMJU Helpdesk";
+const DISPLAY_NAME = "ถาม-ตอบวิชาการ CS แม่โจ้";
 
 const NAV: NavItem[] = [
   { label: "ผู้ช่วยวิชาการ", labelEn: "Assistant", href: "/", icon: "school" },
   { label: "กระทู้ถามตอบ", labelEn: "Forum", href: "/questions", icon: "description" },
   { label: "ทำเนียบอาจารย์", labelEn: "Faculty", href: "/faculty", icon: "group" },
+  { label: "ภาพรวม", labelEn: "Overview", href: "/stats", icon: "dashboard" },
   { label: "ข้อมูลของฉัน", labelEn: "Profile", href: "/profiles/me", icon: "settings" },
 ];
 
@@ -59,11 +60,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 : undefined
             }
             user={{
-              initials: initialsOf(session.profile.displayName),
+              initials: initialsOf(authorLabel(session.profile)),
               roleLabel: roleLabel(session.profile.coreRole),
             }}
-            // ออกจากระบบต้องเป็น POST /auth/logout — หน้า /logout ให้ยืนยันก่อน (auth-contract.md ข้อ 7)
-            logoutHref="/logout"
           >
             <SessionProvider profile={session.profile}>
               {DEMO_MODE && <DemoBanner />}

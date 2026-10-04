@@ -17,9 +17,10 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
  */
 
 /**
- * Cookie names start with the subsystem name. In development every service
- * runs on `localhost`, and cookies are not separated by port, so two
- * subsystems using one name would overwrite each other (SSO spec D6).
+ * Cookie names start with the subsystem name (`-` becomes `_`). In
+ * development every service runs on `localhost`, and cookies are not
+ * separated by port, so two subsystems using one name would overwrite each
+ * other - and Core Hub's own `csmju_*` cookies arrive here too, unread.
  */
 export function ssoCookieNames(subsystemId: string): { session: string; state: string } {
   const prefix = subsystemId.replace(/-/g, '_');
@@ -28,6 +29,9 @@ export function ssoCookieNames(subsystemId: string): { session: string; state: s
 
 /** The state cookie is sent back only to the callback, the one place that reads it. */
 export const SSO_STATE_COOKIE_PATH = '/auth/callback';
+
+/** How long a sign-in may take at Core Hub (contracts/jwt-contract.json `stateTtlMaxSec`). */
+export const SSO_STATE_TTL_SEC = 600;
 
 /** Reads one cookie out of a raw `Cookie:` header without extra dependencies. */
 export function readCookie(header: string | undefined, name: string): string | null {
@@ -105,7 +109,7 @@ export function buildSsoCookie(
 }
 
 /**
- * The state cookie. Its value is `<state>.<landing as base64url>`: the page to
+ * The state cookie. Its value is `<state>.<next as base64url>`: the page to
  * return to travels with the state it belongs to, so a second sign-in in
  * another tab cannot send this one somewhere else. The state itself is
  * base64url and never contains a dot, so the first dot splits the two.

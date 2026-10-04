@@ -10,19 +10,19 @@ import {
   timingSafeEqualString,
 } from './sso-session';
 
-const { session: SESSION, state: STATE } = ssoCookieNames('student-service');
+const { session: SESSION, state: STATE } = ssoCookieNames('csmju-demo-subsystem');
 
 describe('SSO cookies', () => {
   describe('ssoCookieNames', () => {
     it('prefixes both cookies with the subsystem name', () => {
-      expect(ssoCookieNames('student-service')).toEqual({
-        session: 'student_service_access_token',
-        state: 'student_service_sso_state',
+      expect(ssoCookieNames('csmju-demo-subsystem')).toEqual({
+        session: 'csmju_demo_subsystem_access_token',
+        state: 'csmju_demo_subsystem_sso_state',
       });
     });
 
     it('keeps two subsystems on localhost from sharing a cookie', () => {
-      expect(ssoCookieNames('equipment-service').session).not.toBe(SESSION);
+      expect(ssoCookieNames('csmju-equipment').session).not.toBe(SESSION);
     });
   });
 
@@ -87,7 +87,7 @@ describe('SSO cookies', () => {
 
   describe('state cookie', () => {
     it('is short-lived, HttpOnly and sent back only to the callback', () => {
-      const cookie = buildSsoStateCookie(STATE, 'abc', '/courses', 600, false);
+      const cookie = buildSsoStateCookie(STATE, 'abc', '/bookings', 600, false);
       expect(cookie.startsWith(`${STATE}=`)).toBe(true);
       expect(cookie).toContain('HttpOnly');
       expect(cookie).toContain('SameSite=Lax');
@@ -97,15 +97,15 @@ describe('SSO cookies', () => {
 
     it('carries the state and the landing page together', () => {
       const state = createSsoState();
-      const header = buildSsoStateCookie(STATE, state, '/courses?term=1#top', 600, false).split(
+      const header = buildSsoStateCookie(STATE, state, '/bookings?status=PENDING#top', 600, false).split(
         ';',
       )[0];
-      expect(readSsoState(header, STATE)).toEqual({ state, landing: '/courses?term=1#top' });
+      expect(readSsoState(header, STATE)).toEqual({ state, landing: '/bookings?status=PENDING#top' });
     });
 
     it('keeps a Thai landing page intact', () => {
-      const header = buildSsoStateCookie(STATE, 's1', '/ค้นหา?q=วิชา', 600, false).split(';')[0];
-      expect(readSsoState(header, STATE)?.landing).toBe('/ค้นหา?q=วิชา');
+      const header = buildSsoStateCookie(STATE, 's1', '/ห้อง?q=ประชุม', 600, false).split(';')[0];
+      expect(readSsoState(header, STATE)?.landing).toBe('/ห้อง?q=ประชุม');
     });
 
     it('reads a state with no landing as an empty landing', () => {
@@ -118,7 +118,7 @@ describe('SSO cookies', () => {
     it('returns null when the cookie is missing or has no state', () => {
       expect(readSsoState(undefined, STATE)).toBeNull();
       expect(readSsoState('theme=dark', STATE)).toBeNull();
-      expect(readSsoState(`${STATE}=.L2NvdXJzZXM`, STATE)).toBeNull();
+      expect(readSsoState(`${STATE}=.L2Jvb2tpbmdz`, STATE)).toBeNull();
     });
   });
 

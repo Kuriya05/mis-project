@@ -12,6 +12,7 @@ import { formatNumber } from "@/lib/format";
 import { forumCache, loadQuestions, questionQueryKey, type QuestionPage, type QuestionQuery } from "@/lib/forum-cache";
 import { DEFAULT_HOT_TAGS } from "@/lib/tags";
 import type { QuestionSummary, SuccessEnvelope, Tag } from "@/lib/types";
+import ActivityBanner from "./ActivityBanner";
 import { type ForumFilters, type ForumTab, forumHref, sameFilters } from "./filters";
 import QuestionCard from "./QuestionCard";
 import QuestionListSkeleton from "./QuestionListSkeleton";
@@ -20,6 +21,9 @@ const FORUM_TABS: TabItem<ForumTab>[] = [
   { id: "all", label: "กระทู้ทั้งหมด" },
   { id: "mine", label: "กระทู้ของฉัน" },
   { id: "unanswered", label: "กระทู้รอคนตอบ" },
+  { id: "resolved", label: "แก้ไขแล้ว" },
+  { id: "popular", label: "ยอดนิยม" },
+  { id: "saved", label: "ที่บันทึกไว้" },
 ];
 
 /** เกินเวลานี้แล้วยังโหลดไม่เสร็จ ให้บอกผู้ใช้ว่าเซิร์ฟเวอร์ตอบช้า */
@@ -110,6 +114,9 @@ export default function QuestionBoard({ filters }: { filters: ForumFilters }) {
     if (selectedTag) params.tag = selectedTag;
     if (tab === "mine") params.mine = true;
     if (tab === "unanswered") params.unanswered = true;
+    if (tab === "resolved") params.status = "RESOLVED";
+    if (tab === "popular") params.sort = "popular";
+    if (tab === "saved") params.bookmarked = true;
     return params;
   }, [debouncedSearch, selectedTag, tab]);
   const queryKey = questionQueryKey(queryParams);
@@ -222,7 +229,13 @@ export default function QuestionBoard({ filters }: { filters: ForumFilters }) {
       ? "กระทู้ของฉัน"
       : tab === "unanswered"
         ? "กระทู้รอความช่วยเหลือ"
-        : "กระทู้ล่าสุดทั้งหมด";
+        : tab === "resolved"
+          ? "กระทู้ที่แก้ไขแล้ว · มีคำตอบที่ยืนยันแล้ว"
+          : tab === "popular"
+            ? "กระทู้ยอดนิยม · โหวตและคำตอบมากที่สุด"
+            : tab === "saved"
+              ? "กระทู้ที่บันทึกไว้อ่านทีหลัง"
+              : "กระทู้ล่าสุดทั้งหมด";
 
   const sampleDataButton = (label: string, className: string) => (
     <button
@@ -240,6 +253,8 @@ export default function QuestionBoard({ filters }: { filters: ForumFilters }) {
   return (
     <div className="grid gap-6 lg:grid-cols-4">
       <div className="min-w-0 space-y-4 lg:col-span-3">
+        <ActivityBanner />
+
         {/* ค้นหา + ตั้งคำถาม */}
         <div className="flex items-center gap-3 fade-slide-up">
           <div className="relative flex-1">

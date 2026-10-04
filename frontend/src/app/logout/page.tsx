@@ -11,14 +11,14 @@ export const metadata: Metadata = { title: "ออกจากระบบ" };
 export default function LogoutPage() {
   return (
     <>
-      <PageHeader title="ออกจากระบบ" description="ออกจาก CSMJU Helpdesk และทุกระบบของ CSMJU" />
+      <PageHeader title="ออกจากระบบ" description="ออกจากถาม-ตอบวิชาการ CS แม่โจ้ และทุกระบบของ CSMJU" />
       <div className={`${card} max-w-lg px-6 py-8 fade-slide-up stagger-1`}>
         <p className="text-body-md text-on-surface-variant">
           เมื่อออกจากระบบแล้ว ต้องเข้าสู่ระบบผ่าน CSMJU Core Hub อีกครั้งจึงจะใช้งานต่อได้
         </p>
         {DEMO_MODE ? (
           <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
-            <p className="mr-auto text-body-sm text-on-surface-variant">โหมดตัวอย่างไม่มีการออกจากระบบจริง</p>
+            <p className="mr-auto text-label-sm font-normal text-on-surface-variant">โหมดตัวอย่างไม่มีการออกจากระบบจริง</p>
             <Link href="/" className={btnPrimary}>
               กลับหน้าแรก
             </Link>

@@ -5,11 +5,11 @@ const STUDENT_PERMISSIONS: Permission[] = [
   "question:read",
   "tag:read",
   "profile:read:own",
-  "profile:update:own",
   "question:create",
   "question:update:own",
   "question:delete:own",
   "question:vote",
+  "question:bookmark",
   "comment:create",
   "comment:update:own",
   "comment:delete:own",
@@ -18,15 +18,16 @@ const STUDENT_PERMISSIONS: Permission[] = [
 ];
 
 export const DEMO_USER_ID = "demo-wannapa";
-export const DEMO_DEFAULT_NAME = "Wannapa C.";
+/** รหัสสมมติ (6599xxxxxx ไม่ใช่รหัสนักศึกษาจริง) */
+export const DEMO_PERSON_CODE = "6599000011";
 
-export function demoProfile(displayName: string = DEMO_DEFAULT_NAME): MyProfile {
+export function demoProfile(): MyProfile {
   const now = new Date();
   return {
     id: DEMO_USER_ID,
     coreUserId: "seed-student-wannapa",
     email: "demo@mju.ac.th",
-    displayName,
+    personCode: DEMO_PERSON_CODE,
     coreRole: "student",
     subsystemRole: "STUDENT",
     permissions: STUDENT_PERMISSIONS,

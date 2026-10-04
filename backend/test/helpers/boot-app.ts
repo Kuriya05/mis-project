@@ -41,6 +41,6 @@ export async function bootApp(env: Record<string, string> = {}): Promise<NestExp
 export async function resetDatabase(app: NestExpressApplication): Promise<void> {
   const prisma = app.get(PrismaService);
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE comment_votes, question_votes, comments, question_tags, questions, tags, profiles RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE question_bookmarks, comment_votes, question_votes, comments, question_tags, questions, tags, profiles RESTART IDENTITY CASCADE',
   );
 }

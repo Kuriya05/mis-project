@@ -7,9 +7,12 @@ const user = (permissions: Permission[]) => ({ id: "me", permissions });
 describe("permissions", () => {
   it("labels the Core Hub roles in Thai", () => {
     expect(roleLabel("student")).toBe("นักศึกษา");
-    expect(roleLabel("staff")).toBe("อาจารย์");
+    expect(roleLabel("lecturer")).toBe("อาจารย์");
+    expect(roleLabel("staff")).toBe("เจ้าหน้าที่");
+    expect(roleLabel("guest")).toBe("ผู้เยี่ยมชม");
     expect(roleLabel("unknown")).toBe("ผู้ใช้");
     expect(isStaffRole("admin")).toBe(true);
+    expect(isStaffRole("lecturer")).toBe(true);
     expect(isStaffRole("alumni")).toBe(false);
   });
 

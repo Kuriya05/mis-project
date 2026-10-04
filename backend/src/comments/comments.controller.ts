@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { CoreHubIdentity } from '../auth/core-hub-identity';
+import { CoreHubAccessToken } from '../auth/decorators/core-hub-access-token.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { Permission } from '../auth/permissions';
@@ -15,10 +16,11 @@ export class CommentsController {
   @RequirePermissions(Permission.COMMENT_CREATE)
   create(
     @CurrentUser() user: CoreHubIdentity,
+    @CoreHubAccessToken() token: string,
     @Param('questionId', ParseUUIDPipe) questionId: string,
     @Body() dto: CreateCommentDto,
   ) {
-    return this.comments.create(user, questionId, dto);
+    return this.comments.create(user, token, questionId, dto);
   }
 
   @Patch('comments/:id')

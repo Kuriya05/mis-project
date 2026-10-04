@@ -10,6 +10,10 @@ export interface QuestionQuery {
   mine?: boolean;
   status?: "WAITING" | "RESOLVED";
   unanswered?: boolean;
+  /** เฉพาะกระทู้ที่บันทึกไว้ */
+  bookmarked?: boolean;
+  /** newest (ค่าเริ่มต้น) · popular = โหวตมากสุด แล้วคำตอบมากสุด */
+  sort?: "newest" | "popular";
 }
 
 export interface QuestionPage {

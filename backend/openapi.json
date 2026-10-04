@@ -17,7 +17,7 @@
     },
     "/auth/login": {
       "get": {
-        "operationId": "SsoCallbackController_login",
+        "operationId": "SsoController_login",
         "parameters": [],
         "responses": {
           "200": {
@@ -26,17 +26,17 @@
         },
         "summary": "Starts a sign-in: mints a single-use state, keeps it (with the page to\nreturn to) in a cookie only the callback receives, and sends the browser\nto Core Hub's web app, which signs the user in or renews their session.\n\nNo callback_url is sent: Core Hub only ever redirects to the one in its\nregistry, and refuses a different one with 400.",
         "tags": [
-          "SsoCallback"
+          "Sso"
         ]
       }
     },
     "/auth/callback": {
       "get": {
-        "operationId": "SsoCallbackController_callback",
+        "operationId": "SsoController_callback",
         "parameters": [
           {
             "name": "access_token",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
               "type": "string"
@@ -78,24 +78,24 @@
             "description": ""
           }
         },
-        "summary": "Where Core Hub sends the browser with a token. Three outcomes (SSO spec D3):\n\n - no `state`: Core Hub started this sign-in itself, e.g. a sidebar click.\n   The token is dropped unused and the browser restarts at /auth/login,\n   which comes back here with a state this subsystem can check. A link\n   carrying an attacker's token therefore signs the victim in as the\n   victim, never as the attacker.\n - a `state` that does not match the cookie: 401, and no redirect - if\n   the browser refuses cookies, redirecting again would loop forever.\n - a matching state and a valid token: the token becomes the session\n   cookie and the browser goes to the page it started from.\n\nThe URL carries the access token, so it is never logged - only the path.",
+        "summary": "Where Core Hub sends the browser with a token. The answers follow the\ntable of auth-contract 5.1, in its order:\n\n - no `access_token`: 400.\n - no `state`: Core Hub started this sign-in itself, e.g. a sidebar click.\n   The token is dropped unused and the browser restarts at /auth/login,\n   which comes back here with a state this subsystem can check. A link\n   carrying an attacker's token therefore signs the victim in as the\n   victim, never as the attacker.\n - a `state` without a matching state cookie: 401, and no redirect - if\n   the browser refuses cookies, redirecting again would loop forever. A\n   browser gets a page with a \"sign in again\" link instead of raw JSON.\n - a token that fails the ten checks: 401 · a role this subsystem does\n   not accept: 403.\n - otherwise the token becomes the session cookie and the browser goes\n   to the page it started from.\n\nNo failure sets the session cookie. The URL carries the access token, so\nit is never logged - only the path.",
         "tags": [
-          "SsoCallback"
+          "Sso"
         ]
       }
     },
     "/auth/logout": {
       "post": {
-        "operationId": "SsoCallbackController_logout",
+        "operationId": "SsoController_logout",
         "parameters": [],
         "responses": {
           "201": {
             "description": ""
           }
         },
-        "summary": "Signs out everywhere (SSO spec D8). Dropping only this subsystem's cookie\nwould be undone by the next click, which Core Hub - still signed in -\nwould answer with a fresh token. So the browser goes on to Core Hub's\n/logout, where the user confirms ending the Core Hub session.\n\nPublic on purpose: it must work with an expired or missing session, and\nall it does is clear this subsystem's own cookies.",
+        "summary": "Signs out everywhere. Dropping only this subsystem's cookies would be\nundone by the next click, which Core Hub - still signed in - would answer\nwith a fresh token. So the browser goes on to Core Hub's /logout, where\nthe user confirms ending the Core Hub session.\n\nPublic on purpose: it must work with an expired or missing session, and\nall it does is clear this subsystem's own cookies.",
         "tags": [
-          "SsoCallback"
+          "Sso"
         ]
       }
     },
@@ -125,25 +125,40 @@
         "tags": [
           "Profiles"
         ]
-      },
-      "patch": {
-        "operationId": "ProfilesController_update",
+      }
+    },
+    "/api/v1/profiles/me/activity": {
+      "get": {
+        "operationId": "ProfilesController_activity",
         "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProfileDto"
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
               }
             }
           }
         },
+        "summary": "Answers and replies others (the AI assistant included) wrote on the caller's questions.",
+        "tags": [
+          "Profiles"
+        ]
+      }
+    },
+    "/api/v1/profiles/me/activity/seen": {
+      "post": {
+        "operationId": "ProfilesController_markSeen",
+        "parameters": [],
         "responses": {
           "200": {
             "description": ""
           }
         },
+        "summary": "Everything up to now has been read.",
         "tags": [
           "Profiles"
         ]
@@ -271,9 +286,31 @@
             "name": "unanswered",
             "required": false,
             "in": "query",
-            "description": "Waiting questions nobody has commented on yet.",
+            "description": "Waiting questions no person has answered yet (the AI assistant's answer does not count).",
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "bookmarked",
+            "required": false,
+            "in": "query",
+            "description": "Only the questions the caller saved to read later.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "`newest` (default) or `popular`: most votes, then most answers.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "newest",
+                "popular"
+              ]
             }
           },
           {
@@ -458,6 +495,64 @@
       },
       "delete": {
         "operationId": "QuestionsController_unvote",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Questions"
+        ]
+      }
+    },
+    "/api/v1/questions/{id}/bookmark": {
+      "post": {
+        "operationId": "QuestionsController_bookmark",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Questions"
+        ]
+      },
+      "delete": {
+        "operationId": "QuestionsController_unbookmark",
         "parameters": [
           {
             "name": "id",
@@ -715,6 +810,28 @@
           "SampleData"
         ]
       }
+    },
+    "/api/v1/stats": {
+      "get": {
+        "operationId": "StatsController_stats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Board overview for everyone who can read the board.",
+        "tags": [
+          "Stats"
+        ]
+      }
     }
   },
   "info": {
@@ -735,23 +852,10 @@
       "cookie": {
         "type": "apiKey",
         "in": "cookie",
-        "name": "csmju_helpdesk_access_token"
+        "name": "csmju_study_qa_access_token"
       }
     },
     "schemas": {
-      "UpdateProfileDto": {
-        "type": "object",
-        "properties": {
-          "displayName": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          }
-        },
-        "required": [
-          "displayName"
-        ]
-      },
       "CreateTagSuggestionDto": {
         "type": "object",
         "properties": {

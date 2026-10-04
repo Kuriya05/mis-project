@@ -6,12 +6,12 @@ import { useCallback, useEffect, useState } from "react";
 import Avatar from "@/components/shared/Avatar";
 import { btnPrimary, btnSecondary, card, input } from "@/components/shared/classes";
 import { useSession } from "@/components/shared/SessionProvider";
-import { ArrowUpIcon, ChatBubbleIcon, SparklesIcon, SpinnerIcon } from "@/components/shared/icons";
+import { ArrowUpIcon, BookmarkIcon, ChatBubbleIcon, SparklesIcon, SpinnerIcon } from "@/components/shared/icons";
 import { ArrowBackIcon, CheckIcon, StatusBadge } from "@/csmju";
 import { api, errorCode, errorField, errorMessage, unwrap } from "@/lib/api";
 import { invalidateForumCache } from "@/lib/forum-cache";
 import { formatDateTime } from "@/lib/format";
-import { canOnResource, roleBadgeClass, roleLabel } from "@/lib/permissions";
+import { authorLabel, canOnResource, roleBadgeClass, roleLabel } from "@/lib/permissions";
 import { tagClass } from "@/lib/tags";
 import type { Comment, QuestionDetail, SuccessEnvelope } from "@/lib/types";
 import AnswerCard, { type DeleteTarget } from "./AnswerCard";
@@ -23,6 +23,10 @@ import QuestionDetailSkeleton from "./QuestionDetailSkeleton";
 import QuestionNotFound from "./QuestionNotFound";
 
 type LoadState = "loading" | "ready" | "notFound" | "error";
+
+/** รอคำตอบของผู้ช่วย AI นานเท่านี้หลังตั้งกระทู้ โดยโหลดกระทู้ใหม่ทุก ASSISTANT_POLL_MS (คำตอบขึ้นเองไม่ต้องรีเฟรช) */
+const ASSISTANT_WAIT_MS = 60_000;
+const ASSISTANT_POLL_MS = 2_000;
 
 interface VoteState {
   voteCount: number;
@@ -92,6 +96,26 @@ export default function QuestionDetailView({ id }: { id: string }) {
       .then(setQuestion)
       .catch((err: unknown) => console.error("Failed to refresh thread", err));
 
+  // ผู้ช่วย AI เขียนคำตอบแรกเบื้องหลังหลังตั้งกระทู้ — ทุกคนที่เปิดกระทู้ที่เพิ่งตั้งเห็นคำตอบโดยไม่ต้องรีเฟรช
+  const [checkingRepeat, setCheckingRepeat] = useState(false);
+  useEffect(() => {
+    const remaining =
+      question && question.comments.length === 0
+        ? ASSISTANT_WAIT_MS - (Date.now() - Date.parse(question.createdAt))
+        : 0;
+    if (remaining <= 0) {
+      setCheckingRepeat(false);
+      return;
+    }
+    setCheckingRepeat(true);
+    const timer = setTimeout(() => {
+      loadThread()
+        .then(setQuestion)
+        .catch(() => setCheckingRepeat(false));
+    }, Math.min(ASSISTANT_POLL_MS, remaining));
+    return () => clearTimeout(timer);
+  }, [question, loadThread]);
+
   const retryLoad = () => {
     setLoadState("loading");
     setReloadKey((k) => k + 1);
@@ -120,6 +144,7 @@ export default function QuestionDetailView({ id }: { id: string }) {
   const questionAuthorId = question.author.id;
   const isQuestionAuthor = questionAuthorId === profile.id;
   const canVoteQuestion = can("question:vote");
+  const canBookmark = can("question:bookmark");
   const canVoteComment = can("comment:vote");
   const canAnswer = can("comment:create");
   const canReply = isQuestionAuthor && can("comment:create");
@@ -133,6 +158,22 @@ export default function QuestionDetailView({ id }: { id: string }) {
   const answers = question.comments;
 
   // โหวตกระทู้ (กดซ้ำ = ยกเลิกโหวต)
+  // บันทึกกระทู้ไว้อ่านทีหลัง (แท็บ "ที่บันทึกไว้") — กดซ้ำ = เอาออก
+  const handleBookmark = async () => {
+    setActionError("");
+    try {
+      const url = `/api/v1/questions/${id}/bookmark`;
+      const response = question.isBookmarked
+        ? await api.delete<SuccessEnvelope<{ isBookmarked: boolean }>>(url)
+        : await api.post<SuccessEnvelope<{ isBookmarked: boolean }>>(url);
+      const { isBookmarked } = unwrap(response);
+      setQuestion((q) => (q ? { ...q, isBookmarked } : q));
+      invalidateForumCache();
+    } catch (err) {
+      setActionError(errorMessage(err, "บันทึกกระทู้ไม่สำเร็จ กรุณาลองอีกครั้ง"));
+    }
+  };
+
   const handleVoteQuestion = async () => {
     setActionError("");
     try {
@@ -366,14 +407,30 @@ export default function QuestionDetailView({ id }: { id: string }) {
           >
             {question.voteCount}
           </span>
+          {canBookmark && (
+            <button
+              type="button"
+              onClick={handleBookmark}
+              aria-pressed={question.isBookmarked}
+              aria-label={question.isBookmarked ? "เอาออกจากที่บันทึกไว้" : "บันทึกกระทู้นี้ไว้อ่านทีหลัง"}
+              title={question.isBookmarked ? "บันทึกไว้แล้ว" : "บันทึกไว้อ่านทีหลัง"}
+              className={`mt-2 flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border transition-colors duration-150 ${
+                question.isBookmarked
+                  ? "border-primary-container/30 bg-primary-container/10 text-primary-container"
+                  : "border-outline-variant bg-surface text-on-surface-variant hover:border-primary-container hover:text-primary-container"
+              }`}
+            >
+              <BookmarkIcon className={`h-5 w-5 ${question.isBookmarked ? "fill-current" : ""}`} />
+            </button>
+          )}
         </div>
 
         <div className="min-w-0 flex-1 space-y-4">
           <div className="flex flex-wrap items-center gap-3 text-caption text-secondary">
-            <Avatar name={question.author.displayName} size="md" />
+            <Avatar name={authorLabel(question.author)} size="md" />
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-label-md text-on-surface">{question.author.displayName}</span>
+                <span className="text-label-md text-on-surface">{authorLabel(question.author)}</span>
                 <span className={roleBadgeClass(question.author.coreRole)}>{roleLabel(question.author.coreRole)}</span>
               </div>
               <div className="mt-1">
@@ -516,6 +573,13 @@ export default function QuestionDetailView({ id }: { id: string }) {
           />
         ))}
 
+        {answers.length === 0 && checkingRepeat && (
+          <p role="status" className="flex items-center gap-2 rounded-lg bg-primary-container/5 px-4 py-3 text-label-md text-primary-container">
+            <SpinnerIcon className="h-4 w-4 shrink-0 animate-spin" />
+            ผู้ช่วย AI กำลังเขียนคำตอบให้ — คำตอบจะขึ้นที่นี่เองภายในไม่กี่วินาที
+          </p>
+        )}
+
         {answers.length === 0 && (
           <div className="rounded-xl border border-dashed border-outline-variant bg-surface-container-lowest px-6 py-12 text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-surface-container text-primary-container">
@@ -552,8 +616,8 @@ export default function QuestionDetailView({ id }: { id: string }) {
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="flex items-center gap-2 text-caption text-secondary">
-                <Avatar name={profile.displayName} size="xs" />
-                คุณกำลังตอบกลับในฐานะ <strong className="font-semibold text-on-surface">{profile.displayName}</strong>
+                <Avatar name={authorLabel(profile)} size="xs" />
+                คุณกำลังตอบกลับในฐานะ <strong className="font-semibold text-on-surface">{authorLabel(profile)}</strong>
               </span>
               <button
                 type="submit"

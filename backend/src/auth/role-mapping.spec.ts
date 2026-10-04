@@ -6,6 +6,8 @@ describe('Core role -> subsystem role mapping (spec §14)', () => {
     ['student', SubsystemRole.STUDENT],
     ['alumni', SubsystemRole.ALUMNI],
     ['staff', SubsystemRole.STAFF],
+    ['lecturer', SubsystemRole.STAFF],
+    ['guest', SubsystemRole.ALUMNI],
     ['admin', SubsystemRole.ADMIN],
   ])('maps core role "%s" to %s', (coreRole, expected) => {
     expect(mapCoreRoleToSubsystemRole(coreRole)).toBe(expected);

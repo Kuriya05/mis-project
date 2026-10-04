@@ -1,10 +1,11 @@
 {
-  "name": "csmju-helpdesk",
+  "name": "csmju-study-qa",
   "version": "1.0.0",
   "private": true,
   "description": "CSMJU Helpdesk - กระดานถาม-ตอบและผู้ช่วยวิชาการ สาขาวิทยาการคอมพิวเตอร์ (ระบบย่อยของ CSMJU2030)",
   "scripts": {
     "dev": "pnpm --parallel --filter backend --filter frontend dev",
+    "dev:local": "node scripts/dev-local.mjs",
     "build": "pnpm --filter frontend build && pnpm --filter backend build",
     "start": "pnpm --parallel --filter frontend --filter backend start:prod",
     "lint": "pnpm -r lint",

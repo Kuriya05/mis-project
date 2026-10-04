@@ -9,7 +9,7 @@ import {
 import { Prisma } from '../../../generated/prisma/client';
 import { Request, Response } from 'express';
 import { ErrorResponse } from '../api-response';
-import { ErrorCode as Codes } from '../errors';
+import { AppException, ErrorCode as Codes } from '../errors';
 
 const STATUS_TO_CODE: Record<number, string> = {
   400: Codes.BAD_REQUEST,
@@ -18,8 +18,16 @@ const STATUS_TO_CODE: Record<number, string> = {
   404: Codes.NOT_FOUND,
   409: Codes.CONFLICT,
   429: Codes.TOO_MANY_REQUESTS,
+  500: Codes.INTERNAL_ERROR,
   503: Codes.SERVICE_UNAVAILABLE,
 };
+
+/** contracts/error-codes.json: a 429 or 503 always tells the caller when to retry. */
+const NEEDS_RETRY_AFTER = new Set<number>([
+  HttpStatus.TOO_MANY_REQUESTS,
+  HttpStatus.SERVICE_UNAVAILABLE,
+]);
+const DEFAULT_RETRY_AFTER_SEC = 30;
 
 /**
  * Single place that turns any thrown error into the standard error envelope.
@@ -37,13 +45,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const { status, body } = this.render(exception);
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
-      // Full detail server-side only - never in the HTTP response.
+      // Full detail server-side only - never in the HTTP response. The path
+      // goes without its query: /auth/callback carries the access token there.
       this.logger.error(
         JSON.stringify({
           event: 'request.unhandled_error',
           method: request.method,
-          // Path only: the query string can carry credentials, e.g. the
-          // access_token Core Hub appends to /auth/callback.
           path: request.path,
           status,
         }),
@@ -51,13 +58,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     }
 
-    // Nothing left to render into once a response (e.g. a redirect) is out.
+    // A handler that already answered cannot get a second, error response.
     if (response.headersSent) {
       return;
     }
 
-    if (status === HttpStatus.SERVICE_UNAVAILABLE) {
-      response.setHeader('Retry-After', '1');
+    if (NEEDS_RETRY_AFTER.has(status)) {
+      const retryAfter =
+        exception instanceof AppException && exception.retryAfterSec !== undefined
+          ? exception.retryAfterSec
+          : DEFAULT_RETRY_AFTER_SEC;
+      response.setHeader('Retry-After', String(Math.max(1, Math.ceil(retryAfter))));
     }
 
     response.status(status).json(body);
@@ -142,20 +153,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
           body: {
             success: false,
             error: { code: Codes.BAD_REQUEST, message: 'Referenced record does not exist' },
-          },
-        };
-      // Connection pool exhausted: a load problem, not a broken request. A 500
-      // tells the caller "we are broken"; a 503 with Retry-After tells it to
-      // come back, which is what an automatic retry should act on.
-      case 'P2024':
-        return {
-          status: HttpStatus.SERVICE_UNAVAILABLE,
-          body: {
-            success: false,
-            error: {
-              code: Codes.SERVICE_UNAVAILABLE,
-              message: 'Service is busy, please retry shortly',
-            },
           },
         };
       case 'P2025':

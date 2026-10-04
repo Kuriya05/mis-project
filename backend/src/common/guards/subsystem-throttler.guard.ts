@@ -1,14 +1,15 @@
 import {
   CanActivate,
   ExecutionContext,
+  HttpStatus,
   Injectable,
   OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Request, Response } from 'express';
+import { Request } from 'express';
 import { CoreHubIdentity } from '../../auth/core-hub-identity';
 import type { ThrottleWindows } from '../../config/configuration';
-import { AppException } from '../errors';
+import { AppException, ErrorCode } from '../errors';
 
 /**
  * HTTP rate limiting for the whole subsystem, in two layers (SSO spec D10):
@@ -191,8 +192,14 @@ abstract class LayeredThrottler implements CanActivate {
       return true;
     }
 
-    http.getResponse<Response>().setHeader('Retry-After', String(retryAfterSec));
-    throw AppException.tooManyRequests(TOO_MANY_REQUESTS_MESSAGE);
+    // The exception filter sends retryAfterSec as the Retry-After header.
+    throw new AppException(
+      ErrorCode.TOO_MANY_REQUESTS,
+      TOO_MANY_REQUESTS_MESSAGE,
+      HttpStatus.TOO_MANY_REQUESTS,
+      undefined,
+      retryAfterSec,
+    );
   }
 
   private windows(): Window[] {

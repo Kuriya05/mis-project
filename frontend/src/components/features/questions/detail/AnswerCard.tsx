@@ -4,8 +4,9 @@ import Avatar from "@/components/shared/Avatar";
 import { btnPrimary, btnSecondary, btnTonal, input } from "@/components/shared/classes";
 import { ArrowUpIcon, ReplyIcon, SendIcon, SpinnerIcon, StarIcon } from "@/components/shared/icons";
 import { formatDateTime } from "@/lib/format";
-import { roleBadgeClass, roleLabel } from "@/lib/permissions";
+import { authorLabel, authorRoleLabel, roleBadgeClass } from "@/lib/permissions";
 import type { Answer, Comment } from "@/lib/types";
+import AssistantAnswerExtras from "./AssistantAnswerExtras";
 import ContentBody from "./ContentBody";
 import EditedLabel from "./EditedLabel";
 import InlineEditor from "./InlineEditor";
@@ -86,7 +87,7 @@ export default function AnswerCard({
             type="button"
             onClick={() => onVote(answer)}
             aria-pressed={answer.hasVoted}
-            aria-label={`โหวตคำตอบของ ${answer.author.displayName}`}
+            aria-label={`โหวตคำตอบของ ${authorLabel(answer.author)}`}
             className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border transition-colors duration-150 ${
               answer.hasVoted
                 ? "border-primary-container/30 bg-primary-container/10 text-primary-container"
@@ -114,11 +115,11 @@ export default function AnswerCard({
         )}
 
         <div className="flex items-center gap-3 text-caption text-secondary">
-          <Avatar name={answer.author.displayName} size="sm" />
+          <Avatar name={authorLabel(answer.author)} size="sm" />
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-label-md text-on-surface">{answer.author.displayName}</span>
-              <span className={roleBadgeClass(answer.author.coreRole)}>{roleLabel(answer.author.coreRole)}</span>
+              <span className="text-label-md text-on-surface">{authorLabel(answer.author)}</span>
+              <span className={roleBadgeClass(answer.author.coreRole)}>{authorRoleLabel(answer.author)}</span>
               {answer.author.id === questionAuthorId && <OwnerBadge />}
             </div>
             <div className="mt-1">
@@ -141,6 +142,8 @@ export default function AnswerCard({
         ) : (
           <ContentBody text={answer.body} />
         )}
+
+        {answer.author.isAssistant && <AssistantAnswerExtras answer={answer} />}
 
         {/* แก้ไข/ลบของตัวเอง · เจ้าของกระทู้ตอบกลับ · อาจารย์หรือเจ้าของกระทู้ยืนยันคำตอบ */}
         {showActions && (
@@ -197,8 +200,8 @@ export default function AnswerCard({
             {replies.map((item) => (
               <div key={item.id} className="fade-slide-up">
                 <div className="flex flex-wrap items-center gap-2 text-caption text-secondary">
-                  <Avatar name={item.author.displayName} size="xs" />
-                  <span className="text-label-md text-on-surface">{item.author.displayName}</span>
+                  <Avatar name={authorLabel(item.author)} size="xs" />
+                  <span className="text-label-md text-on-surface">{authorLabel(item.author)}</span>
                   {item.author.id === questionAuthorId && <OwnerBadge />}
                   <time dateTime={item.createdAt}>{formatDateTime(item.createdAt)}</time>
                   <EditedLabel at={item.editedAt} />
@@ -249,11 +252,11 @@ export default function AnswerCard({
           <form onSubmit={reply.onSubmit} className="fade-slide-up ml-1 space-y-3 border-l-2 border-primary-container/30 pl-4">
             <textarea
               autoFocus
-              aria-label={`ตอบกลับ ${answer.author.displayName}`}
+              aria-label={`ตอบกลับ ${authorLabel(answer.author)}`}
               aria-invalid={Boolean(reply.error)}
               value={reply.body}
               onChange={(e) => reply.onBodyChange(e.target.value)}
-              placeholder={`ตอบกลับ ${answer.author.displayName}...`}
+              placeholder={`ตอบกลับ ${authorLabel(answer.author)}...`}
               rows={3}
               className={`${input} resize-y p-3`}
             />

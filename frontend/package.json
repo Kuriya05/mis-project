@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack -p 3102",
+    "dev": "next dev --webpack -p 3235",
     "dev:demo": "node scripts/dev-demo.mjs",
     "build": "next build",
-    "start": "next start -p 3102",
+    "start": "next start -p 3235",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "start:prod": "next start -p 3102"
+    "start:prod": "next start -p 3235"
   },
   "dependencies": {
     "axios": "^1.20.0",

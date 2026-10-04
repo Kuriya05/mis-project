@@ -1,5 +1,3 @@
-import { SUBSYSTEM_BLOCKED_NEXT, safeNextPath } from '../auth/next-path';
-
 /**
  * All environment-specific values live here. Nothing in the application code
  * may hard-code a URL, issuer, audience or secret (spec §30, §41.15).
@@ -46,13 +44,10 @@ export interface AppConfig {
     jwksMinRefreshIntervalMs: number;
     jwksRequestTimeoutMs: number;
     clockToleranceSec: number;
-  };
-  /** Central SSO round trip (auth-contract 5). */
-  sso: {
-    /** Lifetime of the state cookie: long enough to type a password. */
-    stateTtlSec: number;
-    /** Where the callback lands when there is no usable `next`. */
-    postLoginRedirect: string;
+    /** Reference data cache (reference-data.md) */
+    dataCacheTtlMs: number;
+    dataMinRefreshIntervalMs: number;
+    dataRequestTimeoutMs: number;
   };
   /**
    * The Next.js frontend this backend serves on the same origin, so the SSO
@@ -61,6 +56,14 @@ export interface AppConfig {
   frontend: {
     /** Next server that page requests are passed to. null = API only. */
     url: string | null;
+  };
+  /** AI assistant (Gemini). An empty key turns every AI feature off. */
+  gemini: {
+    apiKey: string;
+    /** Tried in order: the next one when a model is busy (429/503) or retired (404). */
+    models: string[];
+    apiUrl: string;
+    timeoutMs: number;
   };
   /**
    * HTTP rate limiting in two layers (SSO spec D10). Each layer runs a short
@@ -123,10 +126,10 @@ export default (): AppConfig => {
 
   return {
     nodeEnv: process.env.NODE_ENV ?? 'development',
-    port: num(process.env.PORT, 3002),
+    port: num(process.env.PORT, 4235),
     trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
-    subsystemId: process.env.SUBSYSTEM_ID ?? 'csmju-helpdesk',
-    subsystemName: process.env.SUBSYSTEM_NAME ?? 'CSMJU Helpdesk',
+    subsystemId: process.env.SUBSYSTEM_ID ?? 'csmju-study-qa',
+    subsystemName: process.env.SUBSYSTEM_NAME ?? 'ถาม-ตอบวิชาการ CS แม่โจ้',
     database: {
       poolMax: num(process.env.DATABASE_POOL_MAX, 10),
       connectTimeoutMs: num(process.env.DATABASE_CONNECT_TIMEOUT_MS, 5000),
@@ -136,7 +139,8 @@ export default (): AppConfig => {
     },
     coreHub: {
       url: coreHubUrl,
-      webUrl: process.env.CORE_HUB_WEB_URL ?? 'http://localhost:3100',
+      // On the real server the web app and the API share one origin.
+      webUrl: (process.env.CORE_HUB_WEB_URL ?? coreHubUrl).replace(/\/+$/, ''),
       jwksUrl:
         process.env.CORE_HUB_JWKS_URL ??
         `${coreHubUrl.replace(/\/+$/, '')}/api/v1/.well-known/jwks.json`,
@@ -146,16 +150,23 @@ export default (): AppConfig => {
       jwksMinRefreshIntervalMs: num(process.env.JWKS_MIN_REFRESH_INTERVAL_MS, 30 * 1000),
       jwksRequestTimeoutMs: num(process.env.JWKS_REQUEST_TIMEOUT_MS, 5000),
       clockToleranceSec: num(process.env.JWT_CLOCK_TOLERANCE_SEC, 5),
-    },
-    sso: {
-      // auth-contract 5.2 caps the state cookie at 600 seconds.
-      stateTtlSec: Math.min(num(process.env.SSO_STATE_TTL_SEC, 600), 600),
-      postLoginRedirect:
-        safeNextPath(process.env.SSO_POST_LOGIN_REDIRECT?.trim(), SUBSYSTEM_BLOCKED_NEXT) ??
-        '/',
+      dataCacheTtlMs: num(process.env.CORE_HUB_DATA_CACHE_TTL_MS, 10 * 60 * 1000),
+      dataMinRefreshIntervalMs: num(process.env.CORE_HUB_DATA_MIN_REFRESH_INTERVAL_MS, 30 * 1000),
+      dataRequestTimeoutMs: num(process.env.CORE_HUB_DATA_REQUEST_TIMEOUT_MS, 5000),
     },
     frontend: {
       url: process.env.FRONTEND_URL?.trim().replace(/\/+$/, '') || null,
+    },
+    gemini: {
+      apiKey: process.env.GEMINI_API_KEY?.trim() ?? '',
+      models: (process.env.GEMINI_MODELS ?? 'gemini-3.5-flash,gemini-flash-lite-latest')
+        .split(',')
+        .map((model) => model.trim())
+        .filter((model) => model !== ''),
+      apiUrl: (
+        process.env.GEMINI_API_URL?.trim() || 'https://generativelanguage.googleapis.com/v1beta'
+      ).replace(/\/+$/, ''),
+      timeoutMs: num(process.env.GEMINI_TIMEOUT_MS, 30_000),
     },
     throttle: {
       // A lab of 50 people behind one NAT address opening a page together is

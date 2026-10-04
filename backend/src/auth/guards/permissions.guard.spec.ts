@@ -19,7 +19,6 @@ function identity(role: SubsystemRole): CoreHubIdentity {
     email: 'user@core.local',
     coreRole: role.toLowerCase(),
     subsystemRole: role,
-    expiresAt: null,
   };
 }
 

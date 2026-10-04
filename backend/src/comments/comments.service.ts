@@ -30,10 +30,11 @@ export class CommentsService {
 
   async create(
     user: CoreHubIdentity,
+    token: string,
     questionId: string,
     dto: CreateCommentDto,
   ): Promise<CommentView> {
-    const author = await this.profiles.ensure(user);
+    const author = await this.profiles.ensure(user, token);
     const question = await this.prisma.question.findUnique({
       where: { id: questionId },
       select: { id: true, author: { select: { coreUserId: true } } },

@@ -19,7 +19,7 @@ import { bootApp } from './helpers/boot-app';
 import { FakeCoreHub } from './helpers/fake-core-hub';
 import { TestSigningKey, createSigningKey, signCoreHubToken } from './helpers/token-factory';
 
-const { session: SESSION } = ssoCookieNames('csmju-helpdesk');
+const { session: SESSION } = ssoCookieNames('csmju-study-qa');
 
 /** The limits the subsystem ships with, which the rate-limit suites must pass on. */
 const SHIPPED_LIMITS = {

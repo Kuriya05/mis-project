@@ -20,6 +20,7 @@ export function questionSummarySelect(viewerId: string) {
     tags: { select: { tag: { select: { name: true } } }, orderBy: { tag: { name: 'asc' } } },
     _count: { select: { votes: true, comments: true } },
     votes: { where: { profileId: viewerId }, select: { id: true }, take: 1 },
+    bookmarks: { where: { profileId: viewerId }, select: { id: true }, take: 1 },
   } satisfies Prisma.QuestionSelect;
 }
 
@@ -49,6 +50,8 @@ export interface QuestionSummaryView {
   author: AuthorView;
   voteCount: number;
   hasVoted: boolean;
+  /** The viewer saved this question to read later. */
+  isBookmarked: boolean;
   commentCount: number;
   editedAt: Date | null;
   createdAt: Date;
@@ -73,6 +76,7 @@ export function toQuestionSummaryView(row: SummaryRow): QuestionSummaryView {
     author: toAuthorView(row.author),
     voteCount: row._count.votes,
     hasVoted: row.votes.length > 0,
+    isBookmarked: row.bookmarks.length > 0,
     commentCount: row._count.comments,
     editedAt: row.editedAt,
     createdAt: row.createdAt,
@@ -80,13 +84,16 @@ export function toQuestionSummaryView(row: SummaryRow): QuestionSummaryView {
   };
 }
 
-export function toQuestionDetailView(row: DetailRow): QuestionDetailView {
+export function toQuestionDetailView(
+  row: DetailRow,
+  questionTitles: ReadonlyMap<string, string> = new Map(),
+): QuestionDetailView {
   return {
     ...toQuestionSummaryView(row),
     body: row.body,
     comments: row.comments.map((answer) => ({
-      ...toCommentView(answer),
-      replies: answer.replies.map(toCommentView),
+      ...toCommentView(answer, questionTitles),
+      replies: answer.replies.map((reply) => toCommentView(reply, questionTitles)),
     })),
   };
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import ActivityFeed from "@/components/features/profile/ActivityFeed";
 import MyProfilePanel from "@/components/features/profile/MyProfilePanel";
 import { PageHeader } from "@/csmju";
 
@@ -8,8 +9,11 @@ export const metadata: Metadata = { title: "ข้อมูลของฉัน
 export default function MyProfilePage() {
   return (
     <>
-      <PageHeader title="ข้อมูลของฉัน" description="ชื่อที่แสดง บทบาท และอีเมลของบัญชีที่ใช้ใน CSMJU Helpdesk" />
-      <MyProfilePanel />
+      <PageHeader title="ข้อมูลของฉัน" description="รหัสบุคคล บทบาท อีเมล และคำตอบใหม่ในกระทู้ของคุณ" />
+      <div className="space-y-6">
+        <MyProfilePanel />
+        <ActivityFeed />
+      </div>
     </>
   );
 }

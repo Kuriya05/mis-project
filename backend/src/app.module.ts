@@ -19,6 +19,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { QuestionsModule } from './questions/questions.module';
 import { SampleDataModule } from './sample-data/sample-data.module';
+import { StatsModule } from './stats/stats.module';
 import { TagsModule } from './tags/tags.module';
 
 @Module({
@@ -36,6 +37,7 @@ import { TagsModule } from './tags/tags.module';
     QuestionsModule,
     CommentsModule,
     SampleDataModule,
+    StatsModule,
   ],
   providers: [
     ThrottleStore,

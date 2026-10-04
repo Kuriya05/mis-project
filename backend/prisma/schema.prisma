@@ -3,8 +3,8 @@
 // DB เป็น snake_case (ผ่าน @map / @@map) · Prisma/TS เป็น camelCase · PK เป็น UUID
 
 generator client {
-  provider     = "prisma-client"
-  output       = "../generated/prisma"
+  provider            = "prisma-client"
+  output              = "../generated/prisma"
   moduleFormat        = "cjs"
   importFileExtension = ""
   previewFeatures     = ["partialIndexes"]
@@ -14,12 +14,14 @@ datasource db {
   provider = "postgresql"
 }
 
-// ค่าเดียวกับ claim `role` ของ Core Hub (data-dictionary.md ข้อ 4)
+// ค่าเดียวกับ claim `role` ของ Core Hub ครบ 6 ค่า (contracts/vocabulary.json)
 enum CoreRole {
-  STUDENT @map("student")
-  ALUMNI  @map("alumni")
-  STAFF   @map("staff")
-  ADMIN   @map("admin")
+  STUDENT  @map("student")
+  ALUMNI   @map("alumni")
+  STAFF    @map("staff")
+  ADMIN    @map("admin")
+  LECTURER @map("lecturer")
+  GUEST    @map("guest")
 
   @@map("core_role")
 }
@@ -33,18 +35,24 @@ enum QuestionStatus {
 
 // external reference ไปยังผู้ใช้ของ Core Hub — ไม่ใช่ตาราง user ของตัวเอง และไม่เก็บรหัสผ่าน
 // core_role เป็นสำเนาจาก token ล่าสุด (ใช้แสดง badge ให้คนอื่นเห็น) ห้ามแก้เองนอกจากตอน sync จาก token
-// display_name เป็น local data เพราะ Core Hub v1.0 ยังไม่มี full_name (data-dictionary.md ข้อ 1.3)
+// person_code มาจาก GET /people/me (null = บัญชีไม่ผูกกับบุคคล) · ไม่เก็บชื่อหรืออีเมล (reference-data.md ข้อ 8)
 model Profile {
-  id          String   @id @default(uuid()) @db.Uuid
-  coreUserId  String   @unique @map("core_user_id")
-  coreRole    CoreRole @map("core_role")
-  displayName String   @map("display_name") @db.VarChar(100)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id             String    @id @default(uuid()) @db.Uuid
+  // `sub` ของ Core Hub: string ทึบยาวไม่เกิน 64 ไม่ใช่ UUID เสมอไป (auth-contract ข้อ 4)
+  coreUserId     String    @unique @map("core_user_id") @db.VarChar(64)
+  coreRole       CoreRole  @map("core_role")
+  personCode     String?   @map("person_code") @db.VarChar(64)
+  // ผู้ช่วย AI ของระบบนี้ (แถวเดียว core_user_id = 'system:ai-assistant') — ไม่ใช่ผู้ใช้ของ Core Hub
+  isAssistant    Boolean   @default(false) @map("is_assistant")
+  // เวลาที่เปิดดู "กิจกรรมของฉัน" ล่าสุด — คำตอบในกระทู้ของเราหลังเวลานี้นับเป็นของใหม่
+  activitySeenAt DateTime? @map("activity_seen_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   questions     Question[]
   comments      Comment[]
   questionVotes QuestionVote[]
+  bookmarks     QuestionBookmark[]
   commentVotes  CommentVote[]
 
   @@map("profiles")
@@ -60,10 +68,11 @@ model Question {
   createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  author   Profile        @relation(fields: [authorId], references: [id], onDelete: Restrict)
-  tags     QuestionTag[]
-  comments Comment[]
-  votes    QuestionVote[]
+  author    Profile            @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  tags      QuestionTag[]
+  comments  Comment[]
+  votes     QuestionVote[]
+  bookmarks QuestionBookmark[]
 
   @@index([createdAt(sort: Desc)])
   @@index([authorId, createdAt(sort: Desc)])
@@ -101,15 +110,18 @@ model QuestionTag {
 // แต่ละกระทู้มีคำตอบที่ยืนยันแล้วได้ไม่เกิน 1 ข้อ (partial unique index ด้านล่าง)
 // CHECK "ข้อความตอบกลับห้าม is_verified" Prisma ประกาศไม่ได้ จึงเขียนไว้ใน migration init
 model Comment {
-  id         String    @id @default(uuid()) @db.Uuid
-  questionId String    @map("question_id") @db.Uuid
-  parentId   String?   @map("parent_id") @db.Uuid
-  authorId   String    @map("author_id") @db.Uuid
-  body       String
-  isVerified Boolean   @default(false) @map("is_verified")
-  editedAt   DateTime? @map("edited_at") @db.Timestamptz(3)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                    String    @id @default(uuid()) @db.Uuid
+  questionId            String    @map("question_id") @db.Uuid
+  parentId              String?   @map("parent_id") @db.Uuid
+  authorId              String    @map("author_id") @db.Uuid
+  body                  String
+  isVerified            Boolean   @default(false) @map("is_verified")
+  // คำตอบของผู้ช่วย AI: อาจารย์ทุกคนที่ถนัดเรื่องนี้ (id ในทำเนียบของสาขา ไม่ใช่ชื่อ) และกระทู้เดิมที่ถามซ้ำ
+  recommendedFacultyIds String[]  @default([]) @map("recommended_faculty_ids") @db.VarChar(64)
+  relatedQuestionIds    String[]  @default([]) @map("related_question_ids") @db.Uuid
+  editedAt              DateTime? @map("edited_at") @db.Timestamptz(3)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   question Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
   parent   Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
@@ -152,4 +164,20 @@ model CommentVote {
   @@unique([commentId, profileId])
   @@index([profileId])
   @@map("comment_votes")
+}
+
+// กระทู้ที่ผู้ใช้บันทึกไว้อ่านทีหลัง (แท็บ "ที่บันทึกไว้")
+model QuestionBookmark {
+  id         String   @id @default(uuid()) @db.Uuid
+  questionId String   @map("question_id") @db.Uuid
+  profileId  String   @map("profile_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  profile  Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, profileId])
+  @@index([profileId, createdAt(sort: Desc)])
+  @@map("question_bookmarks")
 }

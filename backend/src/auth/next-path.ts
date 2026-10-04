@@ -2,8 +2,8 @@
  * Validates a `next` value before the subsystem redirects the browser to it.
  *
  * Returns a path inside this subsystem, or null when the value must not be
- * followed. A value is accepted only when every rule holds (auth-contract
- * 5.2, SSO spec 4.5):
+ * followed - the caller then uses its default page. A value is accepted only
+ * when every rule of auth-contract 5.2 holds:
  *
  *  1. a string of 1-512 characters;
  *  2. starts with `/` but not `//`, and contains no backslash - browsers read
@@ -34,6 +34,7 @@ export function safeNextPath(raw: unknown, blockedPrefixes: readonly string[]): 
     }
   }
 
+  // Any origin of our own works: only "is it still the same one" matters.
   const base = new URL('http://self.invalid');
   const url = new URL(raw, base);
 
@@ -41,8 +42,18 @@ export function safeNextPath(raw: unknown, blockedPrefixes: readonly string[]): 
     return null;
   }
 
+  // Compared decoded and in lower case: routing may match `/%61uth/login` or
+  // `/AUTH/login` as /auth/login, and a landing there would start the
+  // sign-in again - a redirect loop through Core Hub.
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(url.pathname).toLowerCase();
+  } catch {
+    return null;
+  }
+
   const blocked = blockedPrefixes.some(
-    (prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`),
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 
   return blocked ? null : `${url.pathname}${url.search}${url.hash}`;

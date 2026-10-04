@@ -23,7 +23,6 @@ export class JwksService {
   private cache = new Map<string, CachedKey>();
   private fetchedAt = 0;
   private lastRefreshAttemptAt = 0;
-  private lastFailureAt = 0;
   private inFlight: Promise<void> | null = null;
 
   constructor(
@@ -60,24 +59,10 @@ export class JwksService {
     this.cache.clear();
     this.fetchedAt = 0;
     this.lastRefreshAttemptAt = 0;
-    this.lastFailureAt = 0;
   }
 
   private isFresh(now: number): boolean {
     return this.cache.size > 0 && now - this.fetchedAt < this.cacheTtlMs;
-  }
-
-  /**
-   * True while a failed refresh is still cooling down.
-   *
-   * A failure does not move `fetchedAt`, so the cache stays permanently stale
-   * for as long as the Core Hub is away. Without this backoff every inbound
-   * request would start its own outbound fetch and block for the whole request
-   * timeout, taking the subsystem down with the Core Hub even though the
-   * cached keys are perfectly usable.
-   */
-  private inFailureBackoff(now: number): boolean {
-    return this.lastFailureAt > 0 && now - this.lastFailureAt < this.minRefreshIntervalMs;
   }
 
   /**
@@ -99,38 +84,20 @@ export class JwksService {
       return this.importKey(kid);
     }
 
-    // Stale or empty cache: refresh, unless a refresh just failed.
-    if (!this.isFresh(now) && !this.inFailureBackoff(now)) {
+    if (!this.isFresh(now)) {
       await this.refresh("cache_stale_or_empty");
       if (this.cache.has(kid)) {
         return this.importKey(kid);
       }
     }
 
-    // A stale key still has to satisfy the signature check, so serving one
-    // keeps the subsystem available through a Core Hub outage without weakening
-    // verification.
-    if (this.cache.has(kid)) {
-      return this.importKey(kid);
-    }
-
-    // Unknown kid: Core Hub may have rotated. Refresh at most once more,
-    // rate limited => no refresh loop.
-    if (this.canAttemptRefresh(Date.now()) && !this.inFailureBackoff(Date.now())) {
+    // Unknown kid: refresh at most once more (rate limited => no refresh loop).
+    if (!this.cache.has(kid) && this.canAttemptRefresh(Date.now())) {
       await this.refresh("unknown_kid");
     }
 
     if (this.cache.has(kid)) {
       return this.importKey(kid);
-    }
-
-    // Nothing was ever cached and the Core Hub is unreachable: the honest
-    // answer is "keys unavailable", not "unknown key id".
-    if (this.cache.size === 0) {
-      throw new TokenVerificationError(
-        TokenRejectionReason.JWKS_UNAVAILABLE,
-        "Core Hub public keys are currently unavailable",
-      );
     }
 
     this.authEvents.unknownKid({ kid, knownKids: this.knownKids() });
@@ -212,7 +179,6 @@ export class JwksService {
 
       this.cache = next;
       this.fetchedAt = Date.now();
-      this.lastFailureAt = 0;
       this.authEvents.jwksRefresh({
         url,
         reason,
@@ -220,7 +186,6 @@ export class JwksService {
         kids: [...next.keys()],
       });
     } catch (error) {
-      this.lastFailureAt = Date.now();
       this.authEvents.jwksRefreshFailed({
         reason: error instanceof Error ? error.message : "unknown error",
         cachedKeyCount: this.cache.size,
